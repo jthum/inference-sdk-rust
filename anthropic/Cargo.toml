@@ -1,0 +1,24 @@
+[package]
+name = "anthropic-sdk"
+version = "0.3.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+inference-sdk-core = { path = "../core" }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["time"] }
+thiserror = "1.0"
+futures = "0.3"
+eventsource-stream = "0.2"
+bon = "3.8.2"
+
+[dev-dependencies]
+clap = { version = "4.5", features = ["derive"] }
+dotenv = "0.15"
+wiremock = "0.6.5"
+tokio = { version = "1.0", features = ["full"] }

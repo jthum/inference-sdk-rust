@@ -1,4 +1,4 @@
-use inference_sdk_core::{SdkError, InferenceRequest, InferenceRole, InferenceContent, InferenceEvent};
+use inference_sdk_core::{SdkError, InferenceRequest, InferenceRole, InferenceContent, InferenceEvent, StopReason};
 use crate::types;
 use std::collections::HashMap;
 
@@ -101,6 +101,7 @@ pub fn to_openai_request(req: InferenceRequest) -> Result<types::chat::ChatCompl
 
 pub struct OpenAiStreamAdapter {
     tool_buffers: HashMap<u32, ToolCallBuffer>,
+    stop_reason: Option<StopReason>,
 }
 
 struct ToolCallBuffer {
@@ -111,7 +112,7 @@ struct ToolCallBuffer {
 
 impl OpenAiStreamAdapter {
     pub fn new() -> Self {
-        Self { tool_buffers: HashMap::new() }
+        Self { tool_buffers: HashMap::new(), stop_reason: None }
     }
 
     pub fn process_chunk(&mut self, chunk: types::chat::ChatCompletionChunk) -> Vec<Result<InferenceEvent, SdkError>> {
@@ -122,6 +123,7 @@ impl OpenAiStreamAdapter {
                 events.push(Ok(InferenceEvent::MessageEnd {
                     input_tokens: usage.prompt_tokens,
                     output_tokens: usage.completion_tokens,
+                    stop_reason: self.stop_reason.clone(),
                 }));
             }
             return events;
@@ -170,6 +172,14 @@ impl OpenAiStreamAdapter {
         }
 
         if let Some(finish_reason) = &choice.finish_reason {
+            self.stop_reason = Some(match finish_reason.as_str() {
+                "stop" => StopReason::EndTurn,
+                "length" => StopReason::MaxTokens,
+                "tool_calls" => StopReason::ToolUse,
+                "content_filter" => StopReason::Unknown, // Or specific error?
+                _ => StopReason::Unknown,
+            });
+
             if finish_reason == "tool_calls" {
                 let mut tools: Vec<_> = self.tool_buffers.drain().collect();
                 tools.sort_by_key(|(k, _)| *k);

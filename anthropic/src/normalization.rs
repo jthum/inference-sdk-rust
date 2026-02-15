@@ -1,4 +1,4 @@
-use inference_sdk_core::{SdkError, InferenceRequest, InferenceRole, InferenceContent, InferenceEvent, RequestOptions};
+use inference_sdk_core::{SdkError, InferenceRequest, InferenceRole, InferenceContent, InferenceEvent, RequestOptions, StopReason};
 use crate::types;
 
 pub fn to_anthropic_request(req: InferenceRequest) -> Result<types::message::MessageRequest, SdkError> {
@@ -115,10 +115,19 @@ impl AnthropicStreamAdapter {
                 types::message::ContentBlock::ToolUse { id, name, input } => vec![Ok(InferenceEvent::ToolCall { id, name, args: input })],
                 _ => vec![],
             },
-            types::message::StreamEvent::MessageDelta { usage, .. } => {
+            types::message::StreamEvent::MessageDelta { delta, usage } => {
+                let stop_reason = delta.stop_reason.map(|s| match s.as_str() {
+                    "end_turn" => StopReason::EndTurn,
+                    "max_tokens" => StopReason::MaxTokens,
+                    "tool_use" => StopReason::ToolUse,
+                    "stop_sequence" => StopReason::StopSequence,
+                    _ => StopReason::Unknown,
+                });
+
                 vec![Ok(InferenceEvent::MessageEnd {
                     input_tokens: self.input_tokens,
                     output_tokens: usage.output_tokens,
+                    stop_reason,
                 })]
             },
             types::message::StreamEvent::Error { error } => vec![Ok(InferenceEvent::Error { message: error.message })],
@@ -186,9 +195,10 @@ mod tests {
 
         let events = adapter.process_event(delta_event);
         assert_eq!(events.len(), 1);
-        if let Ok(InferenceEvent::MessageEnd { input_tokens, output_tokens }) = events[0] {
+        if let Ok(InferenceEvent::MessageEnd { input_tokens, output_tokens, stop_reason }) = events[0].clone() {
             assert_eq!(input_tokens, 10);
             assert_eq!(output_tokens, 20);
+            assert_eq!(stop_reason, Some(StopReason::EndTurn));
         } else {
             panic!("Expected MessageEnd");
         }

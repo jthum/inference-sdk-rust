@@ -116,6 +116,9 @@ pub enum InferenceContent {
         content: String,
         is_error: bool,
     },
+    Thinking {
+        content: String,
+    },
 }
 
 /// Normalized definition of a tool.
@@ -178,22 +181,19 @@ impl InferenceResult {
                              content_parts.push(InferenceContent::Text { text: content });
                          }
                     }
-                    InferenceEvent::ThinkingDelta { .. } => {
-                         // Ignored for now
+                    InferenceEvent::ThinkingDelta { content } => {
+                         if let Some(InferenceContent::Thinking { content: text }) = content_parts.last_mut() {
+                             text.push_str(&content);
+                         } else {
+                             content_parts.push(InferenceContent::Thinking { content });
+                         }
                     }
                     InferenceEvent::ToolCall { id, name, args } => {
                         content_parts.push(InferenceContent::ToolUse { id, name, input: args });
                     }
-                    InferenceEvent::MessageEnd { input_tokens, output_tokens } => {
+                    InferenceEvent::MessageEnd { input_tokens, output_tokens, stop_reason: sr } => {
                         usage = Usage { input_tokens, output_tokens };
-                        // Infer stop reason from content/events? 
-                        // If tool call was last, StopReason::ToolUse.
-                        // Unfortunately not explicitly provided in MessageEnd yet.
-                        if matches!(content_parts.last(), Some(InferenceContent::ToolUse { .. })) {
-                            stop_reason = Some(StopReason::ToolUse);
-                        } else {
-                            stop_reason = Some(StopReason::EndTurn); // Assumption
-                        }
+                        stop_reason = sr;
                     }
                     InferenceEvent::Error { message } => return Err(SdkError::ProviderError(message)),
                 },
@@ -240,6 +240,7 @@ pub enum InferenceEvent {
     MessageEnd {
         input_tokens: u32,
         output_tokens: u32,
+        stop_reason: Option<StopReason>,
     },
     /// An error occurred during the stream.
     Error {

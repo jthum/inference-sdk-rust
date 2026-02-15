@@ -28,8 +28,13 @@ async fn run_inference(provider: Arc<dyn InferenceProvider>, prompt: &str) -> Re
         .build();
 
     // Works for both OpenAI and Anthropic!
-    let result = provider.complete(request).await?;
-    println!("Response: {}", result.content);
+    let result = provider.complete(request, None).await?;
+    println!("Response: {}", result.text());
+    
+    if let Some(reason) = result.stop_reason {
+        println!("Stop Reason: {:?}", reason);
+    }
+    
     Ok(())
 }
 ```
@@ -52,8 +57,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .messages(vec![/* ... */])
         .build();
 
-    let response = client.complete(request).await?; // Standardized method
-    println!("{}", response.content);
+    let response = client.complete(request, None).await?; // Standardized method
+    println!("{}", response.text());
     Ok(())
 }
 ```
@@ -70,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new(std::env::var("OPENAI_API_KEY")?)?;
     let request = InferenceRequest::builder().model("gpt-4o").messages(vec![/*...*/]).build();
 
-    let mut stream = client.stream(request).await?;
+    let mut stream = client.stream(request, None).await?;
     while let Some(event_res) = stream.next().await {
         match event_res? {
             InferenceEvent::MessageDelta { content } => print!("{}", content),

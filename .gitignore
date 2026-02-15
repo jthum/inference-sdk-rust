@@ -1,7 +1,7 @@
 # Rust / Cargo
 /target/
 **/*.rs.bk
-Cargo.lock
+.bedrock/
 
 # Working Docs
 /docs/
@@ -15,6 +15,3 @@ Cargo.lock
 # OS
 .DS_Store
 Thumbs.db
-
-# Debugging
-check_output.txt

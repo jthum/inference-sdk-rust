@@ -2,7 +2,7 @@ use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use std::fmt;
 use std::time::Duration;
 
-use crate::error::AnthropicError;
+use crate::SdkError;
 
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
@@ -15,7 +15,6 @@ pub struct ClientConfig {
     pub timeout: Duration,
     pub max_retries: u32,
     pub headers: HeaderMap,
-    pub auth_token: Option<String>,
 }
 
 // Manually implement Debug to redact the API key
@@ -26,18 +25,14 @@ impl fmt::Debug for ClientConfig {
             .field("base_url", &self.base_url)
             .field("timeout", &self.timeout)
             .field("max_retries", &self.max_retries)
-            .field(
-                "auth_token",
-                &self.auth_token.as_ref().map(|_| "[REDACTED]"),
-            )
             .finish()
     }
 }
 
 impl ClientConfig {
-    pub fn new(api_key: String) -> Result<Self, AnthropicError> {
+    pub fn new(api_key: String) -> Result<Self, SdkError> {
         let header_value = HeaderValue::from_str(&api_key)
-            .map_err(|e| AnthropicError::ConfigError(format!("Invalid API key: {}", e)))?;
+            .map_err(|e| SdkError::ConfigError(format!("Invalid API key: {}", e)))?;
 
         let mut headers = HeaderMap::new();
         headers.insert("x-api-key", header_value);
@@ -53,7 +48,6 @@ impl ClientConfig {
             timeout: DEFAULT_TIMEOUT,
             max_retries: 2,
             headers,
-            auth_token: None,
         })
     }
 

@@ -1,12 +1,10 @@
 pub mod client;
 pub mod config;
-pub mod error;
 pub mod resources;
 pub mod types;
 
 pub use client::Client;
 pub use config::ClientConfig;
-pub use error::AnthropicError;
 
 // Re-export core types
 pub use inference_sdk_core::{SdkError, InferenceProvider, InferenceRequest, InferenceEvent, InferenceResult, InferenceStream};
@@ -159,13 +157,13 @@ fn normalize_anthropic_event(event: crate::types::message::StreamEvent) -> Resul
 /// Anthropic-specific extensions for `RequestOptions`.
 pub trait AnthropicRequestExt {
     /// Add the `anthropic-beta` header to the request options.
-    fn beta(self, version: &str) -> Result<RequestOptions, AnthropicError>;
+    fn beta(self, version: &str) -> Result<RequestOptions, SdkError>;
 }
 
 impl AnthropicRequestExt for RequestOptions {
-    fn beta(self, version: &str) -> Result<RequestOptions, AnthropicError> {
+    fn beta(self, version: &str) -> Result<RequestOptions, SdkError> {
         self.with_header("anthropic-beta", version)
-            .map_err(AnthropicError::from)
+            .map_err(|e| SdkError::ConfigError(e.to_string()))
     }
 }
 

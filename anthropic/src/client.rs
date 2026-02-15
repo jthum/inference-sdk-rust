@@ -1,5 +1,5 @@
 use crate::config::ClientConfig;
-use crate::error::AnthropicError;
+use inference_sdk_core::SdkError;
 use crate::resources::messages::MessagesResource;
 use reqwest::Client as HttpClient;
 use std::sync::Arc;
@@ -11,18 +11,18 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(api_key: impl Into<String>) -> Result<Self, AnthropicError> {
+    pub fn new(api_key: impl Into<String>) -> Result<Self, SdkError> {
         let config = ClientConfig::new(api_key.into())?;
         Self::from_config(config)
     }
 
-    pub fn from_config(config: ClientConfig) -> Result<Self, AnthropicError> {
+    pub fn from_config(config: ClientConfig) -> Result<Self, SdkError> {
         let http_client = HttpClient::builder()
             .timeout(config.timeout)
             .default_headers(config.headers.clone())
             .build()
             .map_err(|e| {
-                AnthropicError::ConfigError(format!("Failed to build HTTP client: {}", e))
+                SdkError::ConfigError(format!("Failed to build HTTP client: {}", e))
             })?;
 
         Ok(Self {

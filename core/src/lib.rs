@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+use std::pin::Pin;
+use futures::Stream;
 use futures::future::BoxFuture;
 
 pub mod error;
@@ -8,16 +10,20 @@ pub mod http;
 pub use error::SdkError;
 pub use http::RequestOptions;
 
+
 /// A provider that can fulfill inference requests.
 pub trait InferenceProvider: Send + Sync {
-    fn complete<'a>(&'a self, request: InferenceRequest) -> BoxFuture<'a, Result<InferenceResult, SdkError>>;
+    fn complete<'a>(&'a self, request: InferenceRequest, options: Option<RequestOptions>) -> BoxFuture<'a, Result<InferenceResult, SdkError>> {
+        Box::pin(async move {
+            let stream = self.stream(request, options).await?;
+            InferenceResult::from_stream(stream).await
+        })
+    }
     
-    // We'll update the trait signature in Phase 3 or later if needed, 
-    // for now we just keep the simple signature but the types change.
-    fn stream<'a>(&'a self, request: InferenceRequest) -> BoxFuture<'a, Result<InferenceStream, SdkError>>;
+    fn stream<'a>(&'a self, request: InferenceRequest, options: Option<RequestOptions>) -> BoxFuture<'a, Result<InferenceStream, SdkError>>;
 }
 
-pub type InferenceStream = futures::stream::BoxStream<'static, Result<InferenceEvent, SdkError>>;
+pub type InferenceStream = Pin<Box<dyn Stream<Item = Result<InferenceEvent, SdkError>> + Send + 'static>>;
 
 /// A standardized request for LLM inference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,14 +57,16 @@ pub struct InferenceRequest {
 }
 
 // Bon builder
-#[derive(bon::Builder)]
+#[bon::bon]
 impl InferenceRequest {
     #[builder]
     pub fn new(
+        #[builder(into)]
         model: String,
         messages: Vec<InferenceMessage>,
         temperature: Option<f32>,
         max_tokens: Option<u32>,
+        #[builder(into)]
         system: Option<String>,
         tools: Option<Vec<Tool>>,
         thinking_budget: Option<u32>,
@@ -149,6 +157,57 @@ impl InferenceResult {
             _ => None,
         }).collect::<Vec<_>>().join("")
     }
+
+    /// Collects a stream into a single result.
+    pub async fn from_stream(mut stream: InferenceStream) -> Result<Self, SdkError> {
+        let mut content_parts = Vec::new();
+        let mut model = String::new();
+        let mut stop_reason = None;
+        let mut usage = Usage { input_tokens: 0, output_tokens: 0 };
+        
+        while let Some(event_res) = futures::StreamExt::next(&mut stream).await {
+            match event_res {
+                Ok(event) => match event {
+                    InferenceEvent::MessageStart { model: m, .. } => {
+                        model = m;
+                    }
+                    InferenceEvent::MessageDelta { content } => {
+                         if let Some(InferenceContent::Text { text }) = content_parts.last_mut() {
+                             text.push_str(&content);
+                         } else {
+                             content_parts.push(InferenceContent::Text { text: content });
+                         }
+                    }
+                    InferenceEvent::ThinkingDelta { .. } => {
+                         // Ignored for now
+                    }
+                    InferenceEvent::ToolCall { id, name, args } => {
+                        content_parts.push(InferenceContent::ToolUse { id, name, input: args });
+                    }
+                    InferenceEvent::MessageEnd { input_tokens, output_tokens } => {
+                        usage = Usage { input_tokens, output_tokens };
+                        // Infer stop reason from content/events? 
+                        // If tool call was last, StopReason::ToolUse.
+                        // Unfortunately not explicitly provided in MessageEnd yet.
+                        if matches!(content_parts.last(), Some(InferenceContent::ToolUse { .. })) {
+                            stop_reason = Some(StopReason::ToolUse);
+                        } else {
+                            stop_reason = Some(StopReason::EndTurn); // Assumption
+                        }
+                    }
+                    InferenceEvent::Error { message } => return Err(SdkError::ProviderError(message)),
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        
+        Ok(InferenceResult {
+            content: content_parts,
+            model,
+            stop_reason,
+            usage,
+        })
+    }
 }
 
 /// Events emitted during a streaming inference response.
@@ -188,25 +247,3 @@ pub enum InferenceEvent {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InferenceResult {
-    pub content: String,
-    pub usage: Usage,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Usage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-}
-
-pub type InferenceStream = Pin<Box<dyn Stream<Item = Result<InferenceEvent, SdkError>> + Send + 'static>>;
-
-/// The core trait that all providers must implement.
-pub trait InferenceProvider: Send + Sync {
-    /// Generate a unified completion (non-streaming).
-    fn complete<'a>(&'a self, request: InferenceRequest) -> BoxFuture<'a, Result<InferenceResult, SdkError>>;
-
-    /// Generate a streaming response.
-    fn stream<'a>(&'a self, request: InferenceRequest) -> BoxFuture<'a, Result<InferenceStream, SdkError>>;
-}

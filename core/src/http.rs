@@ -1,7 +1,37 @@
-use crate::config::RequestOptions;
 use crate::error::SdkError;
+use reqwest::header::HeaderMap;
 use reqwest::Method;
 use serde::Serialize;
+
+#[derive(Debug, Clone, Default)]
+pub struct RequestOptions {
+    pub headers: HeaderMap,
+    pub timeout: Option<std::time::Duration>,
+    pub max_retries: Option<u32>,
+}
+
+impl RequestOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_header(mut self, key: &'static str, value: &str) -> Result<Self, crate::error::SdkError> {
+        let val = reqwest::header::HeaderValue::from_str(value)
+            .map_err(|e| crate::error::SdkError::ConfigError(e.to_string()))?;
+        self.headers.insert(key, val);
+        Ok(self)
+    }
+
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_retries(mut self, retries: u32) -> Self {
+        self.max_retries = Some(retries);
+        self
+    }
+}
 
 /// Retry configuration extracted from a client's defaults and per-request options.
 pub struct RetryConfig {
@@ -33,8 +63,8 @@ pub async fn send_with_retry<T: Serialize>(
             request_builder = request_builder.timeout(timeout);
         }
 
-        if let Some(headers) = &options.headers {
-            request_builder = request_builder.headers(headers.clone());
+        if !options.headers.is_empty() {
+            request_builder = request_builder.headers(options.headers.clone());
         }
 
         let response_result = request_builder.send().await;

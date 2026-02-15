@@ -1,5 +1,5 @@
 use crate::client::Client;
-use crate::error::AnthropicError;
+use inference_sdk_core::SdkError;
 use crate::types::message::{MessageRequest, MessageResponse, StreamEvent};
 use eventsource_stream::Eventsource;
 use futures::Stream;
@@ -21,7 +21,7 @@ impl MessagesResource {
     /// Create a Message (non-streaming)
     ///
     /// POST /v1/messages
-    pub async fn create(&self, request: MessageRequest) -> Result<MessageResponse, AnthropicError> {
+    pub async fn create(&self, request: MessageRequest) -> Result<MessageResponse, SdkError> {
         self.create_with_options(request, RequestOptions::default())
             .await
     }
@@ -31,19 +31,18 @@ impl MessagesResource {
         &self,
         request: MessageRequest,
         options: RequestOptions,
-    ) -> Result<MessageResponse, AnthropicError> {
+    ) -> Result<MessageResponse, SdkError> {
         let config = RetryConfig {
             base_url: self.client.config.base_url.clone(),
             endpoint: "/messages".to_string(),
             max_retries: self.client.config.max_retries,
         };
         let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await
-            .map_err(AnthropicError::from)?;
+            .await?;
         response
             .json::<MessageResponse>()
             .await
-            .map_err(AnthropicError::from)
+            .map_err(SdkError::from)
     }
 
     /// Create a Message Stream
@@ -53,8 +52,8 @@ impl MessagesResource {
         &self,
         request: MessageRequest,
     ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<StreamEvent, AnthropicError>> + Send + 'static>>,
-        AnthropicError,
+        Pin<Box<dyn Stream<Item = Result<StreamEvent, SdkError>> + Send + 'static>>,
+        SdkError,
     > {
         self.create_stream_with_options(request, RequestOptions::default())
             .await
@@ -66,8 +65,8 @@ impl MessagesResource {
         mut request: MessageRequest,
         options: RequestOptions,
     ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<StreamEvent, AnthropicError>> + Send + 'static>>,
-        AnthropicError,
+        Pin<Box<dyn Stream<Item = Result<StreamEvent, SdkError>> + Send + 'static>>,
+        SdkError,
     > {
         request.stream = Some(true);
 
@@ -77,8 +76,8 @@ impl MessagesResource {
             max_retries: self.client.config.max_retries,
         };
         let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await
-            .map_err(AnthropicError::from)?;
+            .await?;
+            
         let stream = response.bytes_stream().eventsource();
 
         let mapped_stream = stream.map(|event_result| match event_result {
@@ -87,9 +86,9 @@ impl MessagesResource {
                     return Ok(StreamEvent::Ping);
                 }
                 serde_json::from_str::<StreamEvent>(&event.data)
-                    .map_err(AnthropicError::SerializationError)
+                    .map_err(SdkError::SerializationError)
             }
-            Err(e) => Err(AnthropicError::StreamError(e.to_string())),
+            Err(e) => Err(SdkError::StreamError(e.to_string())),
         });
 
         Ok(Box::pin(mapped_stream))

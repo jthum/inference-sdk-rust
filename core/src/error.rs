@@ -13,6 +13,8 @@ pub enum SdkError {
     ConfigError(String),
     #[error("Stream error: {0}")]
     StreamError(String),
+    #[error("Provider error: {0}")]
+    ProviderError(String),
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

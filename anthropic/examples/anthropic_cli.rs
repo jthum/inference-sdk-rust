@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut options = RequestOptions::new()
         .with_timeout(Duration::from_secs(args.timeout))
-        .with_max_retries(args.max_retries);
+        .with_retries(args.max_retries);
 
     if let Some(beta) = args.beta {
         options = options.beta(&beta)?;

@@ -1,7 +1,7 @@
 # Rust / Cargo
 /target/
 **/*.rs.bk
-.bedrock/
+.turin/
 
 # Working Docs
 /docs/

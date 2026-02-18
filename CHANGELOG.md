@@ -14,7 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Unified `InferenceProvider` Trait**: Added `RequestOptions` support to `stream()` and `complete()`.
   - **Standardized `Tool` Role**: Introduced `InferenceRole::Tool` to cleanly handle tool execution results across all providers.
   - **Default `complete()`**: Standardized collection logic in `core`, allowing providers to focus on implementing `stream()`.
-- **Bedrock Integration**: Full compatibility with the Bedrock agentic harness.
 
 ### Changed
 - **Breaking**: Renamed `ToolSpec` to `Tool`.

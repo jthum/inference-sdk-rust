@@ -195,10 +195,10 @@ mod tests {
 
         let events = adapter.process_event(delta_event);
         assert_eq!(events.len(), 1);
-        if let Ok(InferenceEvent::MessageEnd { input_tokens, output_tokens, stop_reason }) = events[0].clone() {
-            assert_eq!(input_tokens, 10);
-            assert_eq!(output_tokens, 20);
-            assert_eq!(stop_reason, Some(StopReason::EndTurn));
+        if let Ok(InferenceEvent::MessageEnd { input_tokens, output_tokens, stop_reason }) = &events[0] {
+            assert_eq!(*input_tokens, 10);
+            assert_eq!(*output_tokens, 20);
+            assert_eq!(*stop_reason, Some(StopReason::EndTurn));
         } else {
             panic!("Expected MessageEnd");
         }

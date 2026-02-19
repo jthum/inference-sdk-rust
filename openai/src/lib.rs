@@ -22,7 +22,7 @@ impl InferenceProvider for Client {
             let mapped_stream = stream.map(move |chunk_res: Result<types::chat::ChatCompletionChunk, SdkError>| {
                 match chunk_res {
                     Ok(chunk) => adapter.process_chunk(chunk),
-                    Err(e) => vec![Ok(InferenceEvent::Error { message: e.to_string() })],
+                    Err(e) => vec![Err(e)],
                 }
             });
 

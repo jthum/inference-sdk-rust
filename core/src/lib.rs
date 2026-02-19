@@ -168,6 +168,11 @@ impl InferenceResult {
         let mut stop_reason = None;
         let mut usage = Usage { input_tokens: 0, output_tokens: 0 };
         
+// Tool call accumulation state
+        let mut current_tool_id: Option<String> = None;
+        let mut current_tool_name: Option<String> = None;
+        let mut current_tool_json: String = String::new();
+
         while let Some(event_res) = futures::StreamExt::next(&mut stream).await {
             match event_res {
                 Ok(event) => match event {
@@ -188,14 +193,27 @@ impl InferenceResult {
                              content_parts.push(InferenceContent::Thinking { content });
                          }
                     }
-                    InferenceEvent::ToolCall { id, name, args } => {
-                        content_parts.push(InferenceContent::ToolUse { id, name, input: args });
+                    InferenceEvent::ToolCallStart { id, name } => {
+                        // If we were building a previous tool, we should probably finalize it (though APIs usually don't interleave this way)
+                        // For now, simplicity: start new buffer
+                        current_tool_id = Some(id);
+                        current_tool_name = Some(name);
+                        current_tool_json.clear();
+                    }
+                    InferenceEvent::ToolCallDelta { delta } => {
+                        current_tool_json.push_str(&delta);
                     }
                     InferenceEvent::MessageEnd { input_tokens, output_tokens, stop_reason: sr } => {
+                        // Finalize any pending tool call
+                        if let (Some(id), Some(name)) = (current_tool_id.take(), current_tool_name.take()) {
+                            let input = serde_json::from_str(&current_tool_json).unwrap_or(serde_json::Value::Null); 
+                            content_parts.push(InferenceContent::ToolUse { id, name, input });
+                            current_tool_json.clear();
+                        }
+                        
                         usage = Usage { input_tokens, output_tokens };
                         stop_reason = sr;
                     }
-                    InferenceEvent::Error { message } => return Err(SdkError::ProviderError(message)),
                 },
                 Err(e) => return Err(e),
             }
@@ -230,21 +248,20 @@ pub enum InferenceEvent {
     ThinkingDelta {
         content: String,
     },
-    /// A tool call detected in the stream.
-    ToolCall {
+    /// A tool call started.
+    ToolCallStart {
         id: String,
         name: String,
-        args: serde_json::Value,
+    },
+    /// A delta for a tool call argument (JSON fragment).
+    ToolCallDelta {
+        delta: String,
     },
     /// The end of a message response, including usage statistics.
     MessageEnd {
         input_tokens: u32,
         output_tokens: u32,
         stop_reason: Option<StopReason>,
-    },
-    /// An error occurred during the stream.
-    Error {
-        message: String,
     },
 }
 

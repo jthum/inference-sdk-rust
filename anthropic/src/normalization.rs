@@ -109,10 +109,11 @@ impl AnthropicStreamAdapter {
             types::message::StreamEvent::ContentBlockDelta { delta, .. } => match delta {
                 types::message::ContentBlockDelta::TextDelta { text } => vec![Ok(InferenceEvent::MessageDelta { content: text })],
                 types::message::ContentBlockDelta::ThinkingDelta { thinking } => vec![Ok(InferenceEvent::ThinkingDelta { content: thinking })],
+                types::message::ContentBlockDelta::InputJsonDelta { partial_json } => vec![Ok(InferenceEvent::ToolCallDelta { delta: partial_json })],
                 _ => vec![],
             },
             types::message::StreamEvent::ContentBlockStart { content_block, .. } => match content_block {
-                types::message::ContentBlock::ToolUse { id, name, input } => vec![Ok(InferenceEvent::ToolCall { id, name, args: input })],
+                types::message::ContentBlock::ToolUse { id, name, .. } => vec![Ok(InferenceEvent::ToolCallStart { id, name })],
                 _ => vec![],
             },
             types::message::StreamEvent::MessageDelta { delta, usage } => {
@@ -130,7 +131,7 @@ impl AnthropicStreamAdapter {
                     stop_reason,
                 })]
             },
-            types::message::StreamEvent::Error { error } => vec![Ok(InferenceEvent::Error { message: error.message })],
+            types::message::StreamEvent::Error { error } => vec![Err(SdkError::ProviderError(error.message))],
             _ => vec![],
         }
     }

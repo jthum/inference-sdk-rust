@@ -100,19 +100,12 @@ pub fn to_openai_request(req: InferenceRequest) -> Result<types::chat::ChatCompl
 }
 
 pub struct OpenAiStreamAdapter {
-    tool_buffers: HashMap<u32, ToolCallBuffer>,
     stop_reason: Option<StopReason>,
-}
-
-struct ToolCallBuffer {
-    id: Option<String>,
-    name: Option<String>,
-    arguments: String,
 }
 
 impl OpenAiStreamAdapter {
     pub fn new() -> Self {
-        Self { tool_buffers: HashMap::new(), stop_reason: None }
+        Self { stop_reason: None }
     }
 
     pub fn process_chunk(&mut self, chunk: types::chat::ChatCompletionChunk) -> Vec<Result<InferenceEvent, SdkError>> {
@@ -150,22 +143,22 @@ impl OpenAiStreamAdapter {
 
         if let Some(tool_calls) = &choice.delta.tool_calls {
             for tc in tool_calls {
-                let index = tc.index;
-                let buffer = self.tool_buffers.entry(index).or_insert(ToolCallBuffer {
-                    id: None,
-                    name: None,
-                    arguments: String::new(),
-                });
-
-                if let Some(id) = &tc.id {
-                    buffer.id = Some(id.clone());
+                // OpenAI sends id/name only in the first chunk for a tool call (usually)
+                if let (Some(id), Some(func)) = (&tc.id, &tc.function) {
+                     if let Some(name) = &func.name {
+                         events.push(Ok(InferenceEvent::ToolCallStart {
+                             id: id.clone(),
+                             name: name.clone(),
+                         }));
+                     }
                 }
+                
+                // Subsequent chunks (or same chunk) contain arguments delta
                 if let Some(func) = &tc.function {
-                    if let Some(name) = &func.name {
-                        buffer.name = Some(name.clone());
-                    }
                     if let Some(args) = &func.arguments {
-                        buffer.arguments.push_str(args);
+                        if !args.is_empty() {
+                            events.push(Ok(InferenceEvent::ToolCallDelta { delta: args.clone() }));
+                        }
                     }
                 }
             }
@@ -176,25 +169,12 @@ impl OpenAiStreamAdapter {
                 "stop" => StopReason::EndTurn,
                 "length" => StopReason::MaxTokens,
                 "tool_calls" => StopReason::ToolUse,
-                "content_filter" => StopReason::Unknown, // Or specific error?
+                "content_filter" => StopReason::Unknown, 
                 _ => StopReason::Unknown,
             });
-
-            if finish_reason == "tool_calls" {
-                let mut tools: Vec<_> = self.tool_buffers.drain().collect();
-                tools.sort_by_key(|(k, _)| *k);
-                
-                for (_, buffer) in tools {
-                    if let (Some(id), Some(name)) = (buffer.id, buffer.name) {
-                        let args = serde_json::from_str(&buffer.arguments).unwrap_or(serde_json::json!({}));
-                        events.push(Ok(InferenceEvent::ToolCall {
-                            id,
-                            name,
-                            args,
-                        }));
-                    }
-                }
-            }
+            
+            // We rely on usage chunk for MessageEnd, but if it doesn't come (should be fixed by usage option), 
+            // the stream will end naturally.
         }
 
         events

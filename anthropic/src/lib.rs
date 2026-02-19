@@ -33,7 +33,7 @@ impl InferenceProvider for Client {
             let mapped_stream = stream.map(move |event_res: Result<types::message::StreamEvent, SdkError>| {
                 match event_res {
                     Ok(event) => adapter.process_event(event),
-                    Err(e) => vec![Ok(InferenceEvent::Error { message: e.to_string() })],
+                    Err(e) => vec![Err(e)],
                 }
             });
             

@@ -28,15 +28,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(event_result) = stream.next().await {
         match event_result {
             Ok(event) => match event {
-                StreamEvent::ContentBlockDelta { delta: ContentBlockDelta::TextDelta { text }, .. } => {
-                    print!("{}", text);
+                StreamEvent::ContentBlockDelta { delta, .. } => {
+                     match delta {
+                         ContentBlockDelta::TextDelta { text } => print!("{}", text),
+                         _ => {}
+                     }
                 }
                 StreamEvent::Error { error } => {
                     eprintln!("\nError from stream: {}", error.message);
                 }
                 _ => {}
             },
-            Err(e) => eprintln!("\nError: {}", e),
+            Err(e) => eprintln!("\nStream Error: {}", e),
         }
     }
     println!();

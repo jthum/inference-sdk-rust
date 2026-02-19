@@ -1,5 +1,8 @@
 use futures_util::stream;
-use inference_sdk_core::{InferenceContent, InferenceEvent, InferenceResult, StopReason};
+use inference_sdk_core::{
+    InferenceContent, InferenceEvent, InferenceResult, SdkError, StopReason,
+    StreamInvariantViolation,
+};
 
 #[tokio::test]
 async fn test_from_stream_accumulates_tool_calls() {
@@ -90,4 +93,52 @@ async fn test_from_stream_returns_error_for_invalid_tool_json() {
     let stream = Box::pin(stream::iter(events));
     let result = InferenceResult::from_stream(stream).await;
     assert!(result.is_err(), "invalid tool JSON should return an error");
+}
+
+#[tokio::test]
+async fn test_from_stream_returns_error_when_stream_missing_message_end() {
+    let events = vec![
+        Ok(InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        }),
+        Ok(InferenceEvent::MessageDelta {
+            content: "partial".to_string(),
+        }),
+    ];
+
+    let stream = Box::pin(stream::iter(events));
+    let result = InferenceResult::from_stream(stream).await;
+
+    assert!(matches!(
+        result,
+        Err(SdkError::StreamInvariantViolation(
+            StreamInvariantViolation::MissingMessageEnd
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn test_from_stream_returns_error_when_delta_precedes_message_start() {
+    let events = vec![
+        Ok(InferenceEvent::MessageDelta {
+            content: "oops".to_string(),
+        }),
+        Ok(InferenceEvent::MessageEnd {
+            input_tokens: 1,
+            output_tokens: 1,
+            stop_reason: Some(StopReason::EndTurn),
+        }),
+    ];
+
+    let stream = Box::pin(stream::iter(events));
+    let result = InferenceResult::from_stream(stream).await;
+
+    assert!(matches!(
+        result,
+        Err(SdkError::StreamInvariantViolation(
+            StreamInvariantViolation::MessageNotStarted
+        ))
+    ));
 }

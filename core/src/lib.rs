@@ -6,9 +6,11 @@ use std::pin::Pin;
 
 pub mod error;
 pub mod http;
+pub mod stream_contract;
 
-pub use error::SdkError;
+pub use error::{SdkError, StreamInvariantViolation};
 pub use http::RequestOptions;
+pub use stream_contract::{EventOrderValidator, validate_event_sequence};
 
 /// A provider that can fulfill inference requests.
 pub trait InferenceProvider: Send + Sync {
@@ -180,10 +182,10 @@ impl InferenceResult {
         }
 
         let id = current_tool_id.take().ok_or_else(|| {
-            SdkError::ProviderError("Tool call stream ended without a tool id".to_string())
+            SdkError::StreamInvariantViolation(StreamInvariantViolation::ToolCallMissingId)
         })?;
         let name = current_tool_name.take().ok_or_else(|| {
-            SdkError::ProviderError("Tool call stream ended without a tool name".to_string())
+            SdkError::StreamInvariantViolation(StreamInvariantViolation::ToolCallMissingName)
         })?;
         let input = Self::parse_tool_input(current_tool_json)?;
         content_parts.push(InferenceContent::ToolUse { id, name, input });
@@ -217,79 +219,81 @@ impl InferenceResult {
         let mut current_tool_id: Option<String> = None;
         let mut current_tool_name: Option<String> = None;
         let mut current_tool_json: String = String::new();
+        let mut event_validator = EventOrderValidator::new();
 
         while let Some(event_res) = stream.next().await {
             match event_res {
-                Ok(event) => match event {
-                    InferenceEvent::MessageStart { model: m, .. } => {
-                        model = m;
-                    }
-                    InferenceEvent::MessageDelta { content } => {
-                        if let Some(InferenceContent::Text { text }) = content_parts.last_mut() {
-                            text.push_str(&content);
-                        } else {
-                            content_parts.push(InferenceContent::Text { text: content });
+                Ok(event) => {
+                    event_validator
+                        .validate_event(&event)
+                        .map_err(SdkError::from)?;
+
+                    match event {
+                        InferenceEvent::MessageStart { model: m, .. } => {
+                            model = m;
                         }
-                    }
-                    InferenceEvent::ThinkingDelta { content } => {
-                        if let Some(InferenceContent::Thinking { content: text }) =
-                            content_parts.last_mut()
-                        {
-                            text.push_str(&content);
-                        } else {
-                            content_parts.push(InferenceContent::Thinking { content });
+                        InferenceEvent::MessageDelta { content } => {
+                            if let Some(InferenceContent::Text { text }) = content_parts.last_mut()
+                            {
+                                text.push_str(&content);
+                            } else {
+                                content_parts.push(InferenceContent::Text { text: content });
+                            }
                         }
-                    }
-                    InferenceEvent::ToolCallStart { id, name } => {
-                        // Providers should not interleave tool-call streams, but if they do,
-                        // close the previous pending call before starting the next one.
-                        Self::finalize_pending_tool(
-                            &mut current_tool_id,
-                            &mut current_tool_name,
-                            &mut current_tool_json,
-                            &mut content_parts,
-                        )?;
-                        current_tool_id = Some(id);
-                        current_tool_name = Some(name);
-                        current_tool_json.clear();
-                    }
-                    InferenceEvent::ToolCallDelta { delta } => {
-                        if current_tool_id.is_none() || current_tool_name.is_none() {
-                            return Err(SdkError::ProviderError(
-                                "Received tool_call_delta before tool_call_start".to_string(),
-                            ));
+                        InferenceEvent::ThinkingDelta { content } => {
+                            if let Some(InferenceContent::Thinking { content: text }) =
+                                content_parts.last_mut()
+                            {
+                                text.push_str(&content);
+                            } else {
+                                content_parts.push(InferenceContent::Thinking { content });
+                            }
                         }
-                        current_tool_json.push_str(&delta);
-                    }
-                    InferenceEvent::MessageEnd {
-                        input_tokens,
-                        output_tokens,
-                        stop_reason: sr,
-                    } => {
-                        Self::finalize_pending_tool(
-                            &mut current_tool_id,
-                            &mut current_tool_name,
-                            &mut current_tool_json,
-                            &mut content_parts,
-                        )?;
-                        usage = Usage {
+                        InferenceEvent::ToolCallStart { id, name } => {
+                            // Providers should not interleave tool-call streams, but if they do,
+                            // close the previous pending call before starting the next one.
+                            Self::finalize_pending_tool(
+                                &mut current_tool_id,
+                                &mut current_tool_name,
+                                &mut current_tool_json,
+                                &mut content_parts,
+                            )?;
+                            current_tool_id = Some(id);
+                            current_tool_name = Some(name);
+                            current_tool_json.clear();
+                        }
+                        InferenceEvent::ToolCallDelta { delta } => {
+                            if current_tool_id.is_none() || current_tool_name.is_none() {
+                                return Err(
+                                    StreamInvariantViolation::ToolCallDeltaBeforeStart.into()
+                                );
+                            }
+                            current_tool_json.push_str(&delta);
+                        }
+                        InferenceEvent::MessageEnd {
                             input_tokens,
                             output_tokens,
-                        };
-                        stop_reason = sr;
+                            stop_reason: sr,
+                        } => {
+                            Self::finalize_pending_tool(
+                                &mut current_tool_id,
+                                &mut current_tool_name,
+                                &mut current_tool_json,
+                                &mut content_parts,
+                            )?;
+                            usage = Usage {
+                                input_tokens,
+                                output_tokens,
+                            };
+                            stop_reason = sr;
+                        }
                     }
-                },
+                }
                 Err(e) => return Err(e),
             }
         }
 
-        // Be defensive in case a provider ended the stream without an explicit MessageEnd.
-        Self::finalize_pending_tool(
-            &mut current_tool_id,
-            &mut current_tool_name,
-            &mut current_tool_json,
-            &mut content_parts,
-        )?;
+        event_validator.finish().map_err(SdkError::from)?;
 
         Ok(InferenceResult {
             content: content_parts,

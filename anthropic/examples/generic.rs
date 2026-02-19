@@ -1,10 +1,10 @@
 use anthropic_sdk::{
     Client, InferenceContent, InferenceMessage, InferenceProvider, InferenceRequest, InferenceRole,
 };
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use std::env;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     let api_key = env::var("ANTHROPIC_API_KEY")?;

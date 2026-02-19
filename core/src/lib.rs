@@ -1,5 +1,6 @@
-use futures::Stream;
-use futures::future::BoxFuture;
+use futures_core::Stream;
+use futures_util::StreamExt;
+use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
@@ -217,7 +218,7 @@ impl InferenceResult {
         let mut current_tool_name: Option<String> = None;
         let mut current_tool_json: String = String::new();
 
-        while let Some(event_res) = futures::StreamExt::next(&mut stream).await {
+        while let Some(event_res) = stream.next().await {
             match event_res {
                 Ok(event) => match event {
                     InferenceEvent::MessageStart { model: m, .. } => {

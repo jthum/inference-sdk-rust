@@ -4,7 +4,7 @@ pub mod resources;
 pub mod types;
 
 pub use client::{Client, ClientConfig};
-use futures::{StreamExt, future::BoxFuture};
+use futures_util::{StreamExt, future::BoxFuture};
 pub use inference_sdk_core::{
     InferenceContent, InferenceEvent, InferenceMessage, InferenceProvider, InferenceRequest,
     InferenceResult, InferenceRole, InferenceStream, RequestOptions, SdkError, StopReason, Usage,
@@ -38,7 +38,7 @@ impl InferenceProvider for Client {
             );
 
             // Flatten Vec<Result> to Stream
-            let flat_stream = mapped_stream.flat_map(futures::stream::iter);
+            let flat_stream = mapped_stream.flat_map(futures_util::stream::iter);
 
             Ok(Box::pin(flat_stream) as InferenceStream)
         })

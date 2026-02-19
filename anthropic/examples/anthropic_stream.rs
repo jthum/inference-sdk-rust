@@ -2,11 +2,11 @@ use anthropic_sdk::{
     Client,
     types::message::{Content, ContentBlockDelta, Message, MessageRequest, Role, StreamEvent},
 };
-use dotenv::dotenv;
-use futures::StreamExt;
+use dotenvy::dotenv;
+use futures_util::StreamExt;
 use std::env;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     let api_key = env::var("ANTHROPIC_API_KEY")?;

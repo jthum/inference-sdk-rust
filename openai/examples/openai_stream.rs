@@ -1,11 +1,11 @@
-use futures::StreamExt;
+use futures_util::StreamExt;
 use openai_sdk::{
     Client,
     types::chat::{ChatCompletionRequest, ChatContent, ChatMessage, ChatRole},
 };
 use std::env;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
 

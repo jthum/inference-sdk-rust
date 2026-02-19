@@ -1,4 +1,4 @@
-use futures::stream;
+use futures_util::stream;
 use inference_sdk_core::{InferenceContent, InferenceEvent, InferenceResult, StopReason};
 
 #[tokio::test]

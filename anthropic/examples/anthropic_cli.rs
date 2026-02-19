@@ -3,8 +3,8 @@ use anthropic_sdk::{
     types::message::{Content, ContentBlockDelta, Message, MessageRequest, Role, StreamEvent},
 };
 use clap::Parser;
-use dotenv::dotenv;
-use futures::StreamExt;
+use dotenvy::dotenv;
+use futures_util::StreamExt;
 use std::env;
 use std::time::Duration;
 
@@ -48,7 +48,7 @@ struct Args {
     timeout: u64,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     let args = Args::parse();

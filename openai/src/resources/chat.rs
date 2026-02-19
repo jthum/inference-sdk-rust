@@ -3,8 +3,8 @@ use crate::types::chat::{
     ChatCompletion, ChatCompletionChunk, ChatCompletionRequest, StreamOptions,
 };
 use eventsource_stream::Eventsource;
-use futures::Stream;
-use futures::StreamExt;
+use futures_core::Stream;
+use futures_util::StreamExt;
 use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use inference_sdk_core::{RequestOptions, SdkError};
 use std::pin::Pin;

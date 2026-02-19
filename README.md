@@ -15,7 +15,11 @@ A modular Rust workspace for interacting with LLM inference APIs. Each provider 
 The SDK provides a unified `InferenceProvider` trait, allowing you to write provider-agnostic code:
 
 ```rust
-use inference_sdk_core::{InferenceProvider, InferenceRequest, InferenceRole, InferenceContent};
+use inference_sdk_core::{
+    InferenceContent, InferenceMessage, InferenceProvider, InferenceRequest, InferenceRole,
+    SdkError,
+};
+use std::sync::Arc;
 
 async fn run_inference(provider: Arc<dyn InferenceProvider>, prompt: &str) -> Result<(), SdkError> {
     let request = InferenceRequest::builder()
@@ -24,6 +28,7 @@ async fn run_inference(provider: Arc<dyn InferenceProvider>, prompt: &str) -> Re
         .messages(vec![InferenceMessage {
             role: InferenceRole::User,
             content: vec![InferenceContent::Text { text: prompt.to_string() }],
+            tool_call_id: None,
         }])
         .build();
 

@@ -1,6 +1,6 @@
 use anthropic_sdk::{
-    types::message::{Content, ContentBlockDelta, Message, MessageRequest, Role, StreamEvent},
     AnthropicRequestExt, Client, ClientConfig, RequestOptions,
+    types::message::{Content, ContentBlockDelta, Message, MessageRequest, Role, StreamEvent},
 };
 use clap::Parser;
 use dotenv::dotenv;

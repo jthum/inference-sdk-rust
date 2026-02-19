@@ -1,10 +1,8 @@
-use anthropic_sdk::RequestOptions;
 use anthropic_sdk::AnthropicRequestExt;
+use anthropic_sdk::RequestOptions;
 use anthropic_sdk::{
-    types::message::{
-        Content, ContentBlock, Message, MessageRequest, Role,
-    },
     Client, ClientConfig,
+    types::message::{Content, ContentBlock, Message, MessageRequest, Role},
 };
 use serde_json::json;
 use wiremock::matchers::{header, method, path};

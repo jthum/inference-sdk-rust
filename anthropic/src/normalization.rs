@@ -1,9 +1,14 @@
-use inference_sdk_core::{SdkError, InferenceRequest, InferenceRole, InferenceContent, InferenceEvent, RequestOptions, StopReason};
 use crate::types;
+use inference_sdk_core::{
+    InferenceContent, InferenceEvent, InferenceRequest, InferenceRole, RequestOptions, SdkError,
+    StopReason,
+};
 
-pub fn to_anthropic_request(req: InferenceRequest) -> Result<types::message::MessageRequest, SdkError> {
+pub fn to_anthropic_request(
+    req: InferenceRequest,
+) -> Result<types::message::MessageRequest, SdkError> {
     let mut messages = Vec::new();
-    
+
     for msg in req.messages {
         match msg.role {
             InferenceRole::User => {
@@ -13,10 +18,11 @@ pub fn to_anthropic_request(req: InferenceRequest) -> Result<types::message::Mes
                         content_blocks.push(types::message::ContentBlock::Text { text });
                     }
                 }
+
                 if !content_blocks.is_empty() {
-                    messages.push(types::message::Message { 
-                        role: types::message::Role::User, 
-                        content: types::message::Content::Blocks(content_blocks) 
+                    messages.push(types::message::Message {
+                        role: types::message::Role::User,
+                        content: types::message::Content::Blocks(content_blocks),
                     });
                 }
             }
@@ -28,34 +34,47 @@ pub fn to_anthropic_request(req: InferenceRequest) -> Result<types::message::Mes
                             content_blocks.push(types::message::ContentBlock::Text { text });
                         }
                         InferenceContent::ToolUse { id, name, input } => {
-                             content_blocks.push(types::message::ContentBlock::ToolUse { id, name, input });
-                        }
-                        _ => {}
-                    }
-                }
-                messages.push(types::message::Message { 
-                    role: types::message::Role::Assistant, 
-                    content: types::message::Content::Blocks(content_blocks) 
-                });
-            }
-            InferenceRole::Tool => {
-                let mut content_blocks = Vec::new();
-                for content in msg.content {
-                    match content {
-                        InferenceContent::ToolResult { tool_use_id, content, is_error } => {
-                            content_blocks.push(types::message::ContentBlock::ToolResult {
-                                tool_use_id,
-                                content: Some(vec![types::message::ContentBlock::Text { text: content }]),
-                                is_error: Some(is_error),
+                            content_blocks.push(types::message::ContentBlock::ToolUse {
+                                id,
+                                name,
+                                input,
                             });
                         }
                         _ => {}
                     }
                 }
+
                 if !content_blocks.is_empty() {
-                    messages.push(types::message::Message { 
-                        role: types::message::Role::User, 
-                        content: types::message::Content::Blocks(content_blocks) 
+                    messages.push(types::message::Message {
+                        role: types::message::Role::Assistant,
+                        content: types::message::Content::Blocks(content_blocks),
+                    });
+                }
+            }
+            InferenceRole::Tool => {
+                let mut content_blocks = Vec::new();
+                for content in msg.content {
+                    if let InferenceContent::ToolResult {
+                        tool_use_id,
+                        content,
+                        is_error,
+                    } = content
+                    {
+                        content_blocks.push(types::message::ContentBlock::ToolResult {
+                            tool_use_id,
+                            content: Some(vec![types::message::ContentBlock::Text {
+                                text: content,
+                            }]),
+                            is_error: Some(is_error),
+                        });
+                    }
+                }
+
+                if !content_blocks.is_empty() {
+                    // Anthropic expects tool results to be sent as a user role message.
+                    messages.push(types::message::Message {
+                        role: types::message::Role::User,
+                        content: types::message::Content::Blocks(content_blocks),
                     });
                 }
             }
@@ -63,17 +82,21 @@ pub fn to_anthropic_request(req: InferenceRequest) -> Result<types::message::Mes
     }
 
     let tools: Option<Vec<types::message::Tool>> = req.tools.map(|ts| {
-        ts.into_iter().map(|t| types::message::Tool {
-            name: t.name,
-            description: Some(t.description),
-            input_schema: t.input_schema,
-        }).collect()
+        ts.into_iter()
+            .map(|t| types::message::Tool {
+                name: t.name,
+                description: Some(t.description),
+                input_schema: t.input_schema,
+            })
+            .collect()
     });
 
-    let thinking = req.thinking_budget.map(|budget| types::message::ThinkingConfig {
-        thinking_type: "enabled".to_string(),
-        budget_tokens: budget,
-    });
+    let thinking = req
+        .thinking_budget
+        .map(|budget| types::message::ThinkingConfig {
+            thinking_type: "enabled".to_string(),
+            budget_tokens: budget,
+        });
 
     Ok(types::message::MessageRequest::builder()
         .model(req.model)
@@ -86,36 +109,48 @@ pub fn to_anthropic_request(req: InferenceRequest) -> Result<types::message::Mes
         .build())
 }
 
+#[derive(Default)]
 pub struct AnthropicStreamAdapter {
     input_tokens: u32,
 }
 
 impl AnthropicStreamAdapter {
     pub fn new() -> Self {
-        Self { input_tokens: 0 }
+        Self::default()
     }
 
-    pub fn process_event(&mut self, event: types::message::StreamEvent) -> Vec<Result<InferenceEvent, SdkError>> {
+    pub fn process_event(
+        &mut self,
+        event: types::message::StreamEvent,
+    ) -> Vec<Result<InferenceEvent, SdkError>> {
         match event {
             types::message::StreamEvent::MessageStart { message } => {
                 self.input_tokens = message.usage.input_tokens;
-                
+
                 vec![Ok(InferenceEvent::MessageStart {
                     role: "assistant".to_string(),
                     model: message.model,
                     provider_id: "anthropic".to_string(),
                 })]
-            },
+            }
             types::message::StreamEvent::ContentBlockDelta { delta, .. } => match delta {
-                types::message::ContentBlockDelta::TextDelta { text } => vec![Ok(InferenceEvent::MessageDelta { content: text })],
-                types::message::ContentBlockDelta::ThinkingDelta { thinking } => vec![Ok(InferenceEvent::ThinkingDelta { content: thinking })],
-                types::message::ContentBlockDelta::InputJsonDelta { partial_json } => vec![Ok(InferenceEvent::ToolCallDelta { delta: partial_json })],
+                types::message::ContentBlockDelta::TextDelta { text } => {
+                    vec![Ok(InferenceEvent::MessageDelta { content: text })]
+                }
+                types::message::ContentBlockDelta::ThinkingDelta { thinking } => {
+                    vec![Ok(InferenceEvent::ThinkingDelta { content: thinking })]
+                }
+                types::message::ContentBlockDelta::InputJsonDelta { partial_json } => {
+                    vec![Ok(InferenceEvent::ToolCallDelta {
+                        delta: partial_json,
+                    })]
+                }
                 _ => vec![],
             },
-            types::message::StreamEvent::ContentBlockStart { content_block, .. } => match content_block {
-                types::message::ContentBlock::ToolUse { id, name, .. } => vec![Ok(InferenceEvent::ToolCallStart { id, name })],
-                _ => vec![],
-            },
+            types::message::StreamEvent::ContentBlockStart {
+                content_block: types::message::ContentBlock::ToolUse { id, name, .. },
+                ..
+            } => vec![Ok(InferenceEvent::ToolCallStart { id, name })],
             types::message::StreamEvent::MessageDelta { delta, usage } => {
                 let stop_reason = delta.stop_reason.map(|s| match s.as_str() {
                     "end_turn" => StopReason::EndTurn,
@@ -130,8 +165,10 @@ impl AnthropicStreamAdapter {
                     output_tokens: usage.output_tokens,
                     stop_reason,
                 })]
-            },
-            types::message::StreamEvent::Error { error } => vec![Err(SdkError::ProviderError(error.message))],
+            }
+            types::message::StreamEvent::Error { error } => {
+                vec![Err(SdkError::ProviderError(error.message))]
+            }
             _ => vec![],
         }
     }
@@ -153,7 +190,9 @@ impl AnthropicRequestExt for RequestOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::message::{StreamEvent, MessageResponse, Usage as AnthropicUsage, MessageDeltaUsage};
+    use crate::types::message::{
+        MessageDeltaUsage, MessageResponse, StreamEvent, Usage as AnthropicUsage,
+    };
 
     #[test]
     fn test_anthropic_adapter_captures_usage() {
@@ -170,11 +209,11 @@ mod tests {
                 stop_sequence: None,
                 usage: AnthropicUsage {
                     input_tokens: 10,
-                    output_tokens: 1, 
+                    output_tokens: 1,
                 },
-            }
+            },
         };
-        
+
         let events = adapter.process_event(start_event);
         assert_eq!(events.len(), 1);
         if let Ok(InferenceEvent::MessageStart { provider_id, .. }) = &events[0] {
@@ -189,19 +228,39 @@ mod tests {
                 stop_reason: Some("end_turn".to_string()),
                 stop_sequence: None,
             },
-            usage: MessageDeltaUsage {
-                output_tokens: 20,
-            }
+            usage: MessageDeltaUsage { output_tokens: 20 },
         };
 
         let events = adapter.process_event(delta_event);
         assert_eq!(events.len(), 1);
-        if let Ok(InferenceEvent::MessageEnd { input_tokens, output_tokens, stop_reason }) = &events[0] {
+        if let Ok(InferenceEvent::MessageEnd {
+            input_tokens,
+            output_tokens,
+            stop_reason,
+        }) = &events[0]
+        {
             assert_eq!(*input_tokens, 10);
             assert_eq!(*output_tokens, 20);
             assert_eq!(*stop_reason, Some(StopReason::EndTurn));
         } else {
             panic!("Expected MessageEnd");
         }
+    }
+
+    #[test]
+    fn test_anthropic_adapter_emits_tool_argument_deltas() {
+        let mut adapter = AnthropicStreamAdapter::new();
+        let event = StreamEvent::ContentBlockDelta {
+            index: 0,
+            delta: types::message::ContentBlockDelta::InputJsonDelta {
+                partial_json: "{\"city\":\"S".to_string(),
+            },
+        };
+        let events = adapter.process_event(event);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            Ok(InferenceEvent::ToolCallDelta { ref delta }) if delta == "{\"city\":\"S"
+        ));
     }
 }

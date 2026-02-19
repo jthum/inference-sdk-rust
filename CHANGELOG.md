@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-19
+
+### Added
+- **True Tool Streaming Events**:
+  - Added `InferenceEvent::ToolCallStart { id, name }`.
+  - Added `InferenceEvent::ToolCallDelta { delta }`.
+- **Core Tool Aggregation Tests**:
+  - Added tests for tool-call delta accumulation and malformed JSON handling in `inference-sdk-core`.
+- **OpenAI Streaming Usage Inclusion**:
+  - OpenAI streaming requests now send `stream_options: { include_usage: true }` to improve normalized `MessageEnd` completeness.
+- **Configurable Anthropic Thinking Beta Header**:
+  - Added `ClientConfig::with_thinking_beta_header(...)`.
+  - Added `ClientConfig::without_thinking_beta_header()`.
+- **RequestOptions API Compatibility Alias**:
+  - Added `RequestOptions::with_max_retries(...)` as an alias to `with_retries(...)`.
+
+### Changed
+- **Breaking**: Removed `InferenceEvent::ToolCall { id, name, args }` in favor of tool start + delta events.
+- **Breaking**: Removed `InferenceEvent::Error`; stream errors are now surfaced through `Err(SdkError)` in the stream item type.
+- **Breaking (Behavioral)**: Malformed streamed tool JSON now returns an error instead of being silently replaced with fallback values.
+- **Security/Retention**:
+  - `ClientConfig` no longer stores raw API key fields after header construction (reduces accidental secret retention).
+- **Retry Hardening**:
+  - Added bounded exponential backoff with jitter.
+  - Added retry caps and narrowed retry conditions (transient network/status classes only).
+- **Dependency/Feature Trim**:
+  - Reduced workspace Tokio defaults and moved provider Tokio usage to dev-only where applicable.
+
+### Fixed
+- **Anthropic Tool Streaming**:
+  - `InputJsonDelta` is now mapped to tool-call delta events instead of being ignored.
+- **Normalization Robustness**:
+  - Avoids emitting empty assistant messages during normalization.
+  - Tool-call serialization in normalization now propagates serialization errors.
+- **Codebase Cleanup**:
+  - Removed duplicate dead `core/src/config.rs` request-options implementation.
+
+---
+
 ## [0.4.0] - 2026-02-15
 
 ### Added

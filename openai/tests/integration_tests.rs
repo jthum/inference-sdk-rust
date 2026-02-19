@@ -1,8 +1,6 @@
 use openai_sdk::{
-    types::chat::{
-        ChatCompletionRequest, ChatContent, ChatMessage, ChatRole,
-    },
     Client,
+    types::chat::{ChatCompletionRequest, ChatContent, ChatMessage, ChatRole},
 };
 use serde_json::json;
 use wiremock::matchers::{header, method, path};

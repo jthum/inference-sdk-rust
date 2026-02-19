@@ -1,11 +1,11 @@
 use crate::client::Client;
-use inference_sdk_core::SdkError;
 use crate::types::message::{MessageRequest, MessageResponse, StreamEvent};
 use eventsource_stream::Eventsource;
 use futures::Stream;
 use futures::StreamExt;
-use inference_sdk_core::http::{send_with_retry, RetryConfig};
 use inference_sdk_core::RequestOptions;
+use inference_sdk_core::SdkError;
+use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use std::pin::Pin;
 
 #[derive(Clone, Debug)]
@@ -37,8 +37,8 @@ impl MessagesResource {
             endpoint: "/messages".to_string(),
             max_retries: self.client.config.max_retries,
         };
-        let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await?;
+        let response =
+            send_with_retry(&self.client.http_client, &config, &request, &options).await?;
         response
             .json::<MessageResponse>()
             .await
@@ -51,10 +51,8 @@ impl MessagesResource {
     pub async fn create_stream(
         &self,
         request: MessageRequest,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<StreamEvent, SdkError>> + Send + 'static>>,
-        SdkError,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamEvent, SdkError>> + Send + 'static>>, SdkError>
+    {
         self.create_stream_with_options(request, RequestOptions::default())
             .await
     }
@@ -64,10 +62,8 @@ impl MessagesResource {
         &self,
         mut request: MessageRequest,
         options: RequestOptions,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<StreamEvent, SdkError>> + Send + 'static>>,
-        SdkError,
-    > {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamEvent, SdkError>> + Send + 'static>>, SdkError>
+    {
         request.stream = Some(true);
 
         let config = RetryConfig {
@@ -75,9 +71,9 @@ impl MessagesResource {
             endpoint: "/messages".to_string(),
             max_retries: self.client.config.max_retries,
         };
-        let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await?;
-            
+        let response =
+            send_with_retry(&self.client.http_client, &config, &request, &options).await?;
+
         let stream = response.bytes_stream().eventsource();
 
         let mapped_stream = stream.map(|event_result| match event_result {

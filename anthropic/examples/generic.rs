@@ -1,4 +1,6 @@
-use anthropic_sdk::{Client, InferenceMessage, InferenceProvider, InferenceRequest, InferenceRole, InferenceContent};
+use anthropic_sdk::{
+    Client, InferenceContent, InferenceMessage, InferenceProvider, InferenceRequest, InferenceRole,
+};
 use dotenv::dotenv;
 use std::env;
 
@@ -12,7 +14,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .model("claude-3-5-sonnet-20240620")
         .messages(vec![InferenceMessage {
             role: InferenceRole::User,
-            content: vec![InferenceContent::Text { text: "Hello from generic trait!".to_string() }],
+            content: vec![InferenceContent::Text {
+                text: "Hello from generic trait!".to_string(),
+            }],
             tool_call_id: None,
         }])
         .max_tokens(1024)
@@ -21,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Sending generic request via complete()...");
     // Test complete (default impl using stream)
     let result = client.complete(request, None).await?;
-    
+
     println!("Model: {}", result.model);
     println!("Stop Reason: {:?}", result.stop_reason);
     println!("Usage: {:?}", result.usage);

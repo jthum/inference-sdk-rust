@@ -1,6 +1,6 @@
 use anthropic_sdk::{
-    types::message::{Content, Message, MessageRequest, Role},
     Client,
+    types::message::{Content, Message, MessageRequest, Role},
 };
 use dotenv::dotenv;
 use std::env;

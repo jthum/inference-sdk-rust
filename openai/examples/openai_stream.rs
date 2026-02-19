@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use openai_sdk::{
-    types::chat::{ChatCompletionRequest, ChatContent, ChatMessage, ChatRole},
     Client,
+    types::chat::{ChatCompletionRequest, ChatContent, ChatMessage, ChatRole},
 };
 use std::env;
 

@@ -1,9 +1,11 @@
 use crate::client::Client;
-use crate::types::chat::{ChatCompletionChunk, ChatCompletionRequest, ChatCompletion};
+use crate::types::chat::{
+    ChatCompletion, ChatCompletionChunk, ChatCompletionRequest, StreamOptions,
+};
 use eventsource_stream::Eventsource;
 use futures::Stream;
 use futures::StreamExt;
-use inference_sdk_core::http::{send_with_retry, RetryConfig};
+use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use inference_sdk_core::{RequestOptions, SdkError};
 use std::pin::Pin;
 
@@ -20,10 +22,7 @@ impl ChatResource {
     /// Create a Chat Completion (non-streaming)
     ///
     /// POST /v1/chat/completions
-    pub async fn create(
-        &self,
-        request: ChatCompletionRequest,
-    ) -> Result<ChatCompletion, SdkError> {
+    pub async fn create(&self, request: ChatCompletionRequest) -> Result<ChatCompletion, SdkError> {
         self.create_with_options(request, RequestOptions::default())
             .await
     }
@@ -39,8 +38,8 @@ impl ChatResource {
             endpoint: "/chat/completions".to_string(),
             max_retries: self.client.config.max_retries,
         };
-        let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await?;
+        let response =
+            send_with_retry(&self.client.http_client, &config, &request, &options).await?;
         response
             .json::<ChatCompletion>()
             .await
@@ -71,14 +70,17 @@ impl ChatResource {
         SdkError,
     > {
         request.stream = Some(true);
+        request.stream_options = Some(StreamOptions {
+            include_usage: true,
+        });
 
         let config = RetryConfig {
             base_url: self.client.config.base_url.clone(),
             endpoint: "/chat/completions".to_string(),
             max_retries: self.client.config.max_retries,
         };
-        let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await?;
+        let response =
+            send_with_retry(&self.client.http_client, &config, &request, &options).await?;
         let stream = response.bytes_stream().eventsource();
 
         let mapped_stream = stream.filter_map(|event_result| async move {

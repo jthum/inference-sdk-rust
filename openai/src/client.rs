@@ -1,6 +1,6 @@
 use inference_sdk_core::SdkError;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client as HttpClient;
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,11 +12,10 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct ClientConfig {
-    pub api_key: String,
-    pub base_url: String,
-    pub timeout: Duration,
-    pub max_retries: u32,
-    pub headers: HeaderMap,
+    pub(crate) base_url: String,
+    pub(crate) timeout: Duration,
+    pub(crate) max_retries: u32,
+    pub(crate) headers: HeaderMap,
 }
 
 // Manually implement Debug to redact the API key
@@ -42,7 +41,6 @@ impl ClientConfig {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
         Ok(Self {
-            api_key,
             base_url: DEFAULT_BASE_URL.to_string(),
             timeout: DEFAULT_TIMEOUT,
             max_retries: 2,
@@ -95,7 +93,6 @@ impl Client {
     pub fn chat(&self) -> ChatResource {
         ChatResource::new(self.clone())
     }
-
 
     /// Access the Embeddings resource.
     pub fn embeddings(&self) -> crate::resources::embeddings::Embeddings {

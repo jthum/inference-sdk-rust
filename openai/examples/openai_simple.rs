@@ -1,6 +1,6 @@
 use openai_sdk::{
-    types::chat::{ChatCompletionRequest, ChatContent, ChatMessage, ChatRole},
     Client,
+    types::chat::{ChatCompletionRequest, ChatContent, ChatMessage, ChatRole},
 };
 use std::env;
 
@@ -14,9 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .model("gpt-4o-mini")
         .messages(vec![ChatMessage {
             role: ChatRole::User,
-            content: Some(ChatContent::Text(
-                "Say hello in one sentence.".to_string(),
-            )),
+            content: Some(ChatContent::Text("Say hello in one sentence.".to_string())),
             name: None,
             tool_calls: None,
             tool_call_id: None,

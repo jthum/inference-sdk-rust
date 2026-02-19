@@ -1,4 +1,4 @@
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use std::fmt;
 use std::time::Duration;
 
@@ -7,14 +7,15 @@ use crate::SdkError;
 const DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 pub const ANTHROPIC_VERSION: &str = "2023-06-01";
+pub const DEFAULT_THINKING_BETA_HEADER: &str = "output-128k-2025-02-19";
 
 #[derive(Clone)]
 pub struct ClientConfig {
-    pub api_key: String,
-    pub base_url: String,
-    pub timeout: Duration,
-    pub max_retries: u32,
-    pub headers: HeaderMap,
+    pub(crate) base_url: String,
+    pub(crate) timeout: Duration,
+    pub(crate) max_retries: u32,
+    pub(crate) headers: HeaderMap,
+    pub(crate) thinking_beta_header: Option<String>,
 }
 
 // Manually implement Debug to redact the API key
@@ -43,11 +44,11 @@ impl ClientConfig {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
         Ok(Self {
-            api_key,
             base_url: DEFAULT_BASE_URL.to_string(),
             timeout: DEFAULT_TIMEOUT,
             max_retries: 2,
             headers,
+            thinking_beta_header: Some(DEFAULT_THINKING_BETA_HEADER.to_string()),
         })
     }
 
@@ -63,6 +64,18 @@ impl ClientConfig {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    /// Override the beta header used automatically when `thinking_budget` is set.
+    pub fn with_thinking_beta_header(mut self, header: impl Into<String>) -> Self {
+        self.thinking_beta_header = Some(header.into());
+        self
+    }
+
+    /// Disable automatic beta header injection for thinking requests.
+    pub fn without_thinking_beta_header(mut self) -> Self {
+        self.thinking_beta_header = None;
         self
     }
 }

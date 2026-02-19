@@ -1,7 +1,8 @@
 use crate::error::SdkError;
-use reqwest::header::HeaderMap;
 use reqwest::Method;
+use reqwest::header::HeaderMap;
 use serde::Serialize;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestOptions {
@@ -15,7 +16,11 @@ impl RequestOptions {
         Self::default()
     }
 
-    pub fn with_header(mut self, key: &'static str, value: &str) -> Result<Self, crate::error::SdkError> {
+    pub fn with_header(
+        mut self,
+        key: &'static str,
+        value: &str,
+    ) -> Result<Self, crate::error::SdkError> {
         let val = reqwest::header::HeaderValue::from_str(value)
             .map_err(|e| crate::error::SdkError::ConfigError(e.to_string()))?;
         self.headers.insert(key, val);
@@ -31,6 +36,11 @@ impl RequestOptions {
         self.max_retries = Some(retries);
         self
     }
+
+    /// Alias for `with_retries`, kept for API consistency with client configs.
+    pub fn with_max_retries(self, retries: u32) -> Self {
+        self.with_retries(retries)
+    }
 }
 
 /// Retry configuration extracted from a client's defaults and per-request options.
@@ -38,6 +48,39 @@ pub struct RetryConfig {
     pub base_url: String,
     pub endpoint: String,
     pub max_retries: u32,
+}
+
+const BASE_BACKOFF_MS: u64 = 250;
+const MAX_BACKOFF_MS: u64 = 8_000;
+const MAX_RETRIES_CAP: u32 = 10;
+const JITTER_RANGE_MS: u64 = 200;
+
+fn should_retry_status(status: reqwest::StatusCode) -> bool {
+    status.as_u16() == 408 || status.as_u16() == 429 || status.is_server_error()
+}
+
+fn should_retry_network_error(error: &reqwest::Error) -> bool {
+    error.is_timeout() || error.is_connect() || error.is_request()
+}
+
+fn retry_delay(attempt: u32) -> Duration {
+    let capped_attempt = attempt.min(10);
+    let exp_multiplier = 2_u64.saturating_pow(capped_attempt.saturating_sub(1));
+    let base_ms = BASE_BACKOFF_MS
+        .saturating_mul(exp_multiplier)
+        .min(MAX_BACKOFF_MS);
+
+    let jitter_seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    let jitter_ms = if JITTER_RANGE_MS == 0 {
+        0
+    } else {
+        jitter_seed % JITTER_RANGE_MS
+    };
+
+    Duration::from_millis(base_ms.saturating_add(jitter_ms))
 }
 
 /// Send an HTTP POST request with exponential backoff retry.
@@ -51,13 +94,14 @@ pub async fn send_with_retry<T: Serialize>(
     options: &RequestOptions,
 ) -> Result<reqwest::Response, SdkError> {
     let url = format!("{}{}", config.base_url, config.endpoint);
-    let max_retries = options.max_retries.unwrap_or(config.max_retries);
+    let max_retries = options
+        .max_retries
+        .unwrap_or(config.max_retries)
+        .min(MAX_RETRIES_CAP);
     let mut retries = 0;
 
     loop {
-        let mut request_builder = http_client
-            .request(Method::POST, &url)
-            .json(request_body);
+        let mut request_builder = http_client.request(Method::POST, &url).json(request_body);
 
         if let Some(timeout) = options.timeout {
             request_builder = request_builder.timeout(timeout);
@@ -76,9 +120,9 @@ pub async fn send_with_retry<T: Serialize>(
                 }
 
                 let status = response.status();
-                if (status.is_server_error() || status.as_u16() == 429) && retries < max_retries {
+                if should_retry_status(status) && retries < max_retries {
                     retries += 1;
-                    let wait = std::time::Duration::from_millis(500 * 2_u64.pow(retries - 1));
+                    let wait = retry_delay(retries);
                     tokio::time::sleep(wait).await;
                     continue;
                 }
@@ -90,9 +134,9 @@ pub async fn send_with_retry<T: Serialize>(
                 )));
             }
             Err(e) => {
-                if retries < max_retries {
+                if should_retry_network_error(&e) && retries < max_retries {
                     retries += 1;
-                    let wait = std::time::Duration::from_millis(500 * 2_u64.pow(retries - 1));
+                    let wait = retry_delay(retries);
                     tokio::time::sleep(wait).await;
                     continue;
                 }

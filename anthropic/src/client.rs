@@ -1,6 +1,6 @@
 use crate::config::ClientConfig;
-use inference_sdk_core::SdkError;
 use crate::resources::messages::MessagesResource;
+use inference_sdk_core::SdkError;
 use reqwest::Client as HttpClient;
 use std::sync::Arc;
 
@@ -21,9 +21,7 @@ impl Client {
             .timeout(config.timeout)
             .default_headers(config.headers.clone())
             .build()
-            .map_err(|e| {
-                SdkError::ConfigError(format!("Failed to build HTTP client: {}", e))
-            })?;
+            .map_err(|e| SdkError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
 
         Ok(Self {
             http_client,

@@ -1,6 +1,6 @@
 use crate::client::Client;
 use crate::types::embedding::{EmbeddingRequest, EmbeddingResponse};
-use inference_sdk_core::http::{send_with_retry, RetryConfig};
+use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use inference_sdk_core::{RequestOptions, SdkError};
 
 #[derive(Clone, Debug)]
@@ -14,11 +14,9 @@ impl Embeddings {
     }
 
     /// Creates an embedding vector representing the input text.
-    pub async fn create(
-        &self,
-        request: EmbeddingRequest,
-    ) -> Result<EmbeddingResponse, SdkError> {
-        self.create_with_options(request, RequestOptions::default()).await
+    pub async fn create(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse, SdkError> {
+        self.create_with_options(request, RequestOptions::default())
+            .await
     }
 
     /// Creates an embedding vector with custom request options.
@@ -27,7 +25,7 @@ impl Embeddings {
         request: EmbeddingRequest,
         options: RequestOptions,
     ) -> Result<EmbeddingResponse, SdkError> {
-         let config = RetryConfig {
+        let config = RetryConfig {
             base_url: self.client.config.base_url.clone(),
             endpoint: "/embeddings".to_string(), // Note: base_url is typically "v1", so this becomes "v1/embeddings"
             max_retries: self.client.config.max_retries,
@@ -37,9 +35,9 @@ impl Embeddings {
         // Base URL is "https://api.openai.com/v1".
         // So endpoint should be "/embeddings".
 
-        let response = send_with_retry(&self.client.http_client, &config, &request, &options)
-            .await?;
-            
+        let response =
+            send_with_retry(&self.client.http_client, &config, &request, &options).await?;
+
         response
             .json::<EmbeddingResponse>()
             .await

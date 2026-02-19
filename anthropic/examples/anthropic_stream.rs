@@ -1,6 +1,6 @@
 use anthropic_sdk::{
-    types::message::{Content, ContentBlockDelta, Message, MessageRequest, Role, StreamEvent},
     Client,
+    types::message::{Content, ContentBlockDelta, Message, MessageRequest, Role, StreamEvent},
 };
 use dotenv::dotenv;
 use futures::StreamExt;
@@ -28,12 +28,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(event_result) = stream.next().await {
         match event_result {
             Ok(event) => match event {
-                StreamEvent::ContentBlockDelta { delta, .. } => {
-                     match delta {
-                         ContentBlockDelta::TextDelta { text } => print!("{}", text),
-                         _ => {}
-                     }
-                }
+                StreamEvent::ContentBlockDelta {
+                    delta: ContentBlockDelta::TextDelta { text },
+                    ..
+                } => print!("{}", text),
                 StreamEvent::Error { error } => {
                     eprintln!("\nError from stream: {}", error.message);
                 }

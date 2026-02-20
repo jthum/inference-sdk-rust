@@ -2,6 +2,9 @@
 /target/
 **/*.rs.bk
 .turin/
+/fuzz/artifacts/
+/fuzz/coverage/
+/fuzz/target/
 
 # Working Docs
 /.workspace/

@@ -9,7 +9,7 @@ pub mod http;
 pub mod stream_contract;
 
 pub use error::{SdkError, StreamInvariantViolation};
-pub use http::RequestOptions;
+pub use http::{RequestOptions, RetryNetworkRule, RetryPolicy, RetryStatusRule, TimeoutPolicy};
 pub use stream_contract::{EventOrderValidator, validate_event_sequence};
 
 /// A provider that can fulfill inference requests.

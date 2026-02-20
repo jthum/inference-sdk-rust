@@ -12,7 +12,8 @@ pub use normalization::AnthropicRequestExt;
 use futures_util::{StreamExt, future::BoxFuture};
 pub use inference_sdk_core::{
     InferenceContent, InferenceEvent, InferenceMessage, InferenceProvider, InferenceRequest,
-    InferenceResult, InferenceRole, InferenceStream, RequestOptions, SdkError, StopReason, Usage,
+    InferenceResult, InferenceRole, InferenceStream, RequestOptions, RetryNetworkRule, RetryPolicy,
+    RetryStatusRule, SdkError, StopReason, TimeoutPolicy, Usage,
 };
 
 impl InferenceProvider for Client {

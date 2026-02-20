@@ -17,9 +17,12 @@ impl Client {
     }
 
     pub fn from_config(config: ClientConfig) -> Result<Self, SdkError> {
-        let http_client = HttpClient::builder()
-            .timeout(config.timeout)
-            .default_headers(config.headers.clone())
+        let mut builder = HttpClient::builder().default_headers(config.headers.clone());
+        if let Some(timeout) = config.timeout_policy.request_timeout {
+            builder = builder.timeout(timeout);
+        }
+
+        let http_client = builder
             .build()
             .map_err(|e| SdkError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
 

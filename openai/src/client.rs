@@ -1,4 +1,5 @@
 use inference_sdk_core::SdkError;
+use inference_sdk_core::http::{RetryPolicy, TimeoutPolicy};
 use reqwest::Client as HttpClient;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use std::fmt;
@@ -15,6 +16,8 @@ pub struct ClientConfig {
     pub(crate) base_url: String,
     pub(crate) timeout: Duration,
     pub(crate) max_retries: u32,
+    pub(crate) retry_policy: RetryPolicy,
+    pub(crate) timeout_policy: TimeoutPolicy,
     pub(crate) headers: HeaderMap,
 }
 
@@ -44,6 +47,8 @@ impl ClientConfig {
             base_url: DEFAULT_BASE_URL.to_string(),
             timeout: DEFAULT_TIMEOUT,
             max_retries: 2,
+            retry_policy: RetryPolicy::default().with_max_retries(2),
+            timeout_policy: TimeoutPolicy::default().with_request_timeout(DEFAULT_TIMEOUT),
             headers,
         })
     }
@@ -55,11 +60,27 @@ impl ClientConfig {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self.timeout_policy.request_timeout = Some(timeout);
         self
     }
 
     pub fn with_max_retries(mut self, retries: u32) -> Self {
         self.max_retries = retries;
+        self.retry_policy.max_retries = retries;
+        self
+    }
+
+    pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+        self.max_retries = policy.max_retries;
+        self.retry_policy = policy;
+        self
+    }
+
+    pub fn with_timeout_policy(mut self, policy: TimeoutPolicy) -> Self {
+        if let Some(request_timeout) = policy.request_timeout {
+            self.timeout = request_timeout;
+        }
+        self.timeout_policy = policy;
         self
     }
 }
@@ -77,9 +98,12 @@ impl Client {
     }
 
     pub fn from_config(config: ClientConfig) -> Result<Self, SdkError> {
-        let http_client = HttpClient::builder()
-            .timeout(config.timeout)
-            .default_headers(config.headers.clone())
+        let mut builder = HttpClient::builder().default_headers(config.headers.clone());
+        if let Some(timeout) = config.timeout_policy.request_timeout {
+            builder = builder.timeout(timeout);
+        }
+
+        let http_client = builder
             .build()
             .map_err(|e| SdkError::ConfigError(format!("Failed to build HTTP client: {}", e)))?;
 

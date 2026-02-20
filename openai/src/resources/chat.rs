@@ -36,7 +36,8 @@ impl ChatResource {
         let config = RetryConfig {
             base_url: self.client.config.base_url.clone(),
             endpoint: "/chat/completions".to_string(),
-            max_retries: self.client.config.max_retries,
+            retry_policy: self.client.config.retry_policy.clone(),
+            timeout_policy: self.client.config.timeout_policy.clone(),
         };
         let response =
             send_with_retry(&self.client.http_client, &config, &request, &options).await?;
@@ -77,7 +78,8 @@ impl ChatResource {
         let config = RetryConfig {
             base_url: self.client.config.base_url.clone(),
             endpoint: "/chat/completions".to_string(),
-            max_retries: self.client.config.max_retries,
+            retry_policy: self.client.config.retry_policy.clone(),
+            timeout_policy: self.client.config.timeout_policy.clone(),
         };
         let response =
             send_with_retry(&self.client.http_client, &config, &request, &options).await?;

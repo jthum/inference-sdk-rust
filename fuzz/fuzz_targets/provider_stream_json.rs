@@ -44,7 +44,13 @@ fn process_anthropic_line(
 }
 
 fn validate_and_assemble(events: Vec<Result<InferenceEvent, SdkError>>) {
-    let ok_events: Vec<InferenceEvent> = events.iter().filter_map(|e| e.clone().ok()).collect();
+    let ok_events: Vec<InferenceEvent> = events
+        .iter()
+        .filter_map(|e| match e {
+            Ok(event) => Some(event.clone()),
+            Err(_) => None,
+        })
+        .collect();
     if !ok_events.is_empty() {
         let _ = validate_event_sequence(&ok_events);
     }

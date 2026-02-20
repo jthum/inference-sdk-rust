@@ -9,6 +9,7 @@ A modular Rust workspace for interacting with LLM inference APIs. Each provider 
 | [`inference-sdk-core`](core/) | **Normalization Layer**: Traits (`InferenceProvider`), standardized types (`InferenceRequest`, `InferenceEvent`), and shared logic. |
 | [`anthropic-sdk`](anthropic/) | Anthropic Messages API implementation. |
 | [`openai-sdk`](openai/) | OpenAI Chat & Embeddings API implementation. |
+| [`inference-sdk-registry`](registry/) | Provider driver registry/factory for building `Arc<dyn InferenceProvider>` from generic driver config. |
 
 ## Normalization Layer
 
@@ -98,7 +99,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 inference-sdk-rust/
 ├── core/        → Normalization Layer: InferenceProvider trait, unified Request/Event types.
 ├── anthropic/   → Implementation of InferenceProvider for Claude.
-└── openai/      → Implementation of InferenceProvider for GPT/Embeddings.
+├── openai/      → Implementation of InferenceProvider for GPT/Embeddings.
+└── registry/    → Driver registry/factory for provider instantiation.
 ```
 
 ## Quality and Contract Docs

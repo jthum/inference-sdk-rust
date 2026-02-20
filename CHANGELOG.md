@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance Budget Guards**:
   - Added release-mode perf budget tests in `core/tests/perf_budget.rs` for event validation and stream assembly hot paths.
   - Added `docs/PERFORMANCE_GUARDS.md`.
+- **Provider Registry/Factory Crate**:
+  - Added `inference-sdk-registry`.
+  - Provides `ProviderRegistry` + `ProviderInit` to construct providers by generic driver name (`openai`, `anthropic`) without downstream hardcoded provider bootstrapping.
 
 ### Changed
 - **Breaking**: Removed `InferenceEvent::ToolCall { id, name, args }` in favor of tool start + delta events.

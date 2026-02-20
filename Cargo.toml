@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "anthropic", "openai"]
+members = ["core", "anthropic", "openai", "registry"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -17,3 +17,6 @@ wiremock = "0.6.5"
 dotenvy = "0.15"
 clap = { version = "4.5", default-features = false, features = ["derive", "std"] }
 inference-sdk-core = { path = "./core" }
+openai-sdk = { path = "./openai" }
+anthropic-sdk = { path = "./anthropic" }
+inference-sdk-registry = { path = "./registry" }

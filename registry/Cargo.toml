@@ -1,0 +1,10 @@
+[package]
+name = "inference-sdk-registry"
+version = "0.5.0"
+edition = "2024"
+
+[dependencies]
+inference-sdk-core = { workspace = true }
+openai-sdk = { workspace = true }
+anthropic-sdk = { workspace = true }
+thiserror = { workspace = true }

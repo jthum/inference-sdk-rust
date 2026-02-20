@@ -193,7 +193,10 @@ impl InferenceResult {
         Ok(())
     }
 
-    /// Helper to extract all text content combined.
+    /// Helper to extract only `InferenceContent::Text` blocks combined.
+    ///
+    /// This intentionally excludes `Thinking`, `ToolUse`, and `ToolResult` content.
+    /// Consumers that need full semantic output should inspect `self.content` directly.
     pub fn text(&self) -> String {
         self.content
             .iter()

@@ -69,6 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+`InferenceResult::text()` returns only normalized text blocks. If you need tool calls or thinking blocks, inspect `InferenceResult::content` directly.
+
 ### 2. Streaming (Unified)
 
 ```rust

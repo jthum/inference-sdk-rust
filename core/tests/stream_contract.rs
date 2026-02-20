@@ -72,3 +72,38 @@ fn test_validate_event_sequence_rejects_missing_message_end() {
         Err(StreamInvariantViolation::MissingMessageEnd)
     ));
 }
+
+#[test]
+fn test_validate_event_sequence_rejects_message_end_before_start() {
+    let events = vec![InferenceEvent::MessageEnd {
+        input_tokens: 1,
+        output_tokens: 2,
+        stop_reason: Some(StopReason::EndTurn),
+    }];
+
+    assert!(matches!(
+        validate_event_sequence(&events),
+        Err(StreamInvariantViolation::MessageEndBeforeStart)
+    ));
+}
+
+#[test]
+fn test_validate_event_sequence_rejects_duplicate_message_start() {
+    let events = vec![
+        InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        },
+        InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        },
+    ];
+
+    assert!(matches!(
+        validate_event_sequence(&events),
+        Err(StreamInvariantViolation::DuplicateMessageStart)
+    ));
+}

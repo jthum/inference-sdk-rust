@@ -142,3 +142,102 @@ async fn test_from_stream_returns_error_when_delta_precedes_message_start() {
         ))
     ));
 }
+
+#[tokio::test]
+async fn test_from_stream_returns_error_when_message_end_precedes_message_start() {
+    let events = vec![Ok(InferenceEvent::MessageEnd {
+        input_tokens: 1,
+        output_tokens: 1,
+        stop_reason: Some(StopReason::EndTurn),
+    })];
+
+    let stream = Box::pin(stream::iter(events));
+    let result = InferenceResult::from_stream(stream).await;
+
+    assert!(matches!(
+        result,
+        Err(SdkError::StreamInvariantViolation(
+            StreamInvariantViolation::MessageEndBeforeStart
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn test_from_stream_returns_error_on_duplicate_message_start() {
+    let events = vec![
+        Ok(InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        }),
+        Ok(InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        }),
+    ];
+
+    let stream = Box::pin(stream::iter(events));
+    let result = InferenceResult::from_stream(stream).await;
+
+    assert!(matches!(
+        result,
+        Err(SdkError::StreamInvariantViolation(
+            StreamInvariantViolation::DuplicateMessageStart
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn test_from_stream_rolls_tool_calls_on_new_tool_start() {
+    let events = vec![
+        Ok(InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        }),
+        Ok(InferenceEvent::ToolCallStart {
+            id: "call_1".to_string(),
+            name: "weather".to_string(),
+        }),
+        Ok(InferenceEvent::ToolCallDelta {
+            delta: "{\"city\":\"SF\"}".to_string(),
+        }),
+        Ok(InferenceEvent::ToolCallStart {
+            id: "call_2".to_string(),
+            name: "time".to_string(),
+        }),
+        Ok(InferenceEvent::ToolCallDelta {
+            delta: "{\"timezone\":\"UTC\"}".to_string(),
+        }),
+        Ok(InferenceEvent::MessageEnd {
+            input_tokens: 1,
+            output_tokens: 1,
+            stop_reason: Some(StopReason::ToolUse),
+        }),
+    ];
+
+    let stream = Box::pin(stream::iter(events));
+    let result = InferenceResult::from_stream(stream)
+        .await
+        .expect("stream assembly should succeed");
+
+    let tool_uses = result
+        .content
+        .iter()
+        .filter_map(|content| match content {
+            InferenceContent::ToolUse { id, name, input } => {
+                Some((id.as_str(), name.as_str(), input.clone()))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(tool_uses.len(), 2);
+    assert_eq!(tool_uses[0].0, "call_1");
+    assert_eq!(tool_uses[0].1, "weather");
+    assert_eq!(tool_uses[0].2["city"], "SF");
+    assert_eq!(tool_uses[1].0, "call_2");
+    assert_eq!(tool_uses[1].1, "time");
+    assert_eq!(tool_uses[1].2["timezone"], "UTC");
+}

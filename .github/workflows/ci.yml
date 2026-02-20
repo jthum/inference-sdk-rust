@@ -43,12 +43,18 @@ jobs:
       - name: doc tests
         run: cargo test --workspace --doc
 
+      - name: examples compile check
+        run: cargo check --workspace --examples
+
       - name: provider contract tests
         run: |
           cargo test -p inference-sdk-core --test stream_contract
           cargo test -p inference-sdk-core --test property_stream
           cargo test -p openai-sdk --test provider_contract
           cargo test -p anthropic-sdk --test provider_contract
+
+      - name: performance budget and regression checks
+        run: cargo test -p inference-sdk-core --release --test perf_budget -- --ignored
 
   security:
     runs-on: ubuntu-latest

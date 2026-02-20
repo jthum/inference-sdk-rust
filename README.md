@@ -101,6 +101,13 @@ inference-sdk-rust/
 └── openai/      → Implementation of InferenceProvider for GPT/Embeddings.
 ```
 
+## Quality and Contract Docs
+
+- Stream/Event Contract: `docs/STREAM_EVENT_CONTRACT.md`
+- Provider Implementation Guide: `docs/PROVIDER_IMPLEMENTATION_GUIDE.md`
+- Fuzzing Guide: `docs/FUZZING.md`
+- Performance Guards: `docs/PERFORMANCE_GUARDS.md`
+
 ## License
 
 MIT

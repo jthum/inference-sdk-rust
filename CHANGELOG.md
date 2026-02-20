@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `ClientConfig::without_thinking_beta_header()`.
 - **RequestOptions API Compatibility Alias**:
   - Added `RequestOptions::with_max_retries(...)` as an alias to `with_retries(...)`.
+- **Performance Budget Guards**:
+  - Added release-mode perf budget tests in `core/tests/perf_budget.rs` for event validation and stream assembly hot paths.
+  - Added `docs/PERFORMANCE_GUARDS.md`.
 
 ### Changed
 - **Breaking**: Removed `InferenceEvent::ToolCall { id, name, args }` in favor of tool start + delta events.
@@ -32,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added retry caps and narrowed retry conditions (transient network/status classes only).
 - **Dependency/Feature Trim**:
   - Reduced workspace Tokio defaults and moved provider Tokio usage to dev-only where applicable.
+- **CI Quality Gates**:
+  - Added workspace example compile check (`cargo check --workspace --examples`).
+  - Added release perf budget gate (`cargo test -p inference-sdk-core --release --test perf_budget -- --ignored`).
+- **Version Alignment**:
+  - Bumped `inference-sdk-core`, `anthropic-sdk`, and `openai-sdk` crate versions to `0.5.0`.
 
 ### Fixed
 - **Anthropic Tool Streaming**:

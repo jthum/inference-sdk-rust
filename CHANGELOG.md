@@ -41,8 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI Quality Gates**:
   - Added workspace example compile check (`cargo check --workspace --examples`).
   - Added release perf budget gate (`cargo test -p inference-sdk-core --release --test perf_budget -- --ignored`).
+  - Added release policy automation (`scripts/check_release_policy.sh`) to enforce changelog + migration note updates for API/version-impacting changes.
 - **Version Alignment**:
   - Bumped `inference-sdk-core`, `anthropic-sdk`, and `openai-sdk` crate versions to `0.5.0`.
+- **Fuzz CI Reliability**:
+  - Updated fuzz smoke workflow to run `cargo fuzz` against the runner host target explicitly, avoiding accidental musl target resolution failures.
 
 ### Fixed
 - **Anthropic Tool Streaming**:

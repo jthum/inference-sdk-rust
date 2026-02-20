@@ -109,6 +109,7 @@ inference-sdk-rust/
 - Provider Implementation Guide: `docs/PROVIDER_IMPLEMENTATION_GUIDE.md`
 - Fuzzing Guide: `docs/FUZZING.md`
 - Performance Guards: `docs/PERFORMANCE_GUARDS.md`
+- Migration Notes: `docs/MIGRATIONS.md`
 
 ## License
 

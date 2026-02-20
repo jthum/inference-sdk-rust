@@ -33,7 +33,13 @@ jobs:
           tool: cargo-fuzz
 
       - name: Run provider JSON fuzz smoke
-        run: cargo fuzz run provider_stream_json --fuzz-dir fuzz --sanitizer none -- -runs=0 -max_total_time=60
+        shell: bash
+        run: |
+          HOST_TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+          cargo fuzz run provider_stream_json --fuzz-dir fuzz --target "$HOST_TARGET" --sanitizer none -- -runs=0 -max_total_time=60
 
       - name: Run core event stream fuzz smoke
-        run: cargo fuzz run core_event_stream --fuzz-dir fuzz --sanitizer none -- -runs=0 -max_total_time=60
+        shell: bash
+        run: |
+          HOST_TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+          cargo fuzz run core_event_stream --fuzz-dir fuzz --target "$HOST_TARGET" --sanitizer none -- -runs=0 -max_total_time=60

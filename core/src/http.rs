@@ -118,12 +118,14 @@ impl RequestOptions {
 
     pub fn with_header(
         mut self,
-        key: &'static str,
+        key: impl AsRef<str>,
         value: &str,
     ) -> Result<Self, crate::error::SdkError> {
+        let name = reqwest::header::HeaderName::from_bytes(key.as_ref().as_bytes())
+            .map_err(|e| crate::error::SdkError::ConfigError(e.to_string()))?;
         let val = reqwest::header::HeaderValue::from_str(value)
             .map_err(|e| crate::error::SdkError::ConfigError(e.to_string()))?;
-        self.headers.insert(key, val);
+        self.headers.insert(name, val);
         Ok(self)
     }
 
@@ -415,5 +417,20 @@ mod tests {
         let policy = RetryPolicy::default().with_max_retries(999);
         let clamped = clamp_retry_policy(policy);
         assert_eq!(clamped.max_retries, MAX_RETRIES_CAP);
+    }
+
+    #[test]
+    fn test_request_options_accepts_dynamic_header_names() {
+        let options = RequestOptions::default()
+            .with_header("x-custom-runtime-header", "value")
+            .expect("dynamic header name should be accepted");
+
+        assert_eq!(
+            options
+                .headers
+                .get("x-custom-runtime-header")
+                .and_then(|v| v.to_str().ok()),
+            Some("value")
+        );
     }
 }

@@ -39,10 +39,10 @@ pub fn to_anthropic_request(
                                 input,
                             });
                         }
-                        InferenceContent::Thinking { content } => {
+                        InferenceContent::Thinking { content, signature } => {
                             content_blocks.push(types::message::ContentBlock::Thinking {
                                 thinking: content,
-                                signature: None,
+                                signature,
                             });
                         }
                         _ => {}
@@ -143,12 +143,14 @@ impl AnthropicStreamAdapter {
                 types::message::ContentBlockDelta::ThinkingDelta { thinking } => {
                     vec![Ok(InferenceEvent::ThinkingDelta { content: thinking })]
                 }
+                types::message::ContentBlockDelta::SignatureDelta { signature } => {
+                    vec![Ok(InferenceEvent::ThinkingSignatureDelta { signature })]
+                }
                 types::message::ContentBlockDelta::InputJsonDelta { partial_json } => {
                     vec![Ok(InferenceEvent::ToolCallDelta {
                         delta: partial_json,
                     })]
                 }
-                _ => vec![],
             },
             types::message::StreamEvent::ContentBlockStart {
                 content_block: types::message::ContentBlock::ToolUse { id, name, .. },
@@ -266,6 +268,23 @@ mod tests {
             Ok(InferenceEvent::ToolCallDelta { ref delta }) if delta == "{\"city\":\"S"
         ));
     }
+
+    #[test]
+    fn test_anthropic_adapter_emits_thinking_signature_deltas() {
+        let mut adapter = AnthropicStreamAdapter::new();
+        let event = StreamEvent::ContentBlockDelta {
+            index: 0,
+            delta: types::message::ContentBlockDelta::SignatureDelta {
+                signature: "sig_abc".to_string(),
+            },
+        };
+        let events = adapter.process_event(event);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            Ok(InferenceEvent::ThinkingSignatureDelta { ref signature }) if signature == "sig_abc"
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -282,6 +301,7 @@ mod request_normalization_tests {
                 content: vec![
                     InferenceContent::Thinking {
                         content: "deliberation".to_string(),
+                        signature: Some("sig-123".to_string()),
                     },
                     InferenceContent::ToolUse {
                         id: "toolu_1".to_string(),
@@ -303,8 +323,8 @@ mod request_normalization_tests {
                     &blocks[0],
                     crate::types::message::ContentBlock::Thinking {
                         thinking,
-                        signature: None,
-                    } if thinking == "deliberation"
+                        signature: Some(signature),
+                    } if thinking == "deliberation" && signature == "sig-123"
                 ));
                 assert!(matches!(
                     &blocks[1],

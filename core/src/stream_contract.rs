@@ -29,7 +29,9 @@ impl EventOrderValidator {
                 }
                 self.message_started = true;
             }
-            InferenceEvent::MessageDelta { .. } | InferenceEvent::ThinkingDelta { .. } => {
+            InferenceEvent::MessageDelta { .. }
+            | InferenceEvent::ThinkingDelta { .. }
+            | InferenceEvent::ThinkingSignatureDelta { .. } => {
                 if !self.message_started {
                     return Err(StreamInvariantViolation::MessageNotStarted);
                 }

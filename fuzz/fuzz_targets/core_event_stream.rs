@@ -44,24 +44,27 @@ fn synthesize_events(data: &[u8]) -> Vec<Result<InferenceEvent, SdkError>> {
             break;
         }
 
-        match byte % 7 {
+        match byte % 8 {
             0 => events.push(Ok(InferenceEvent::MessageDelta {
                 content: format!("m{:02x}", byte),
             })),
             1 => events.push(Ok(InferenceEvent::ThinkingDelta {
                 content: format!("t{:02x}", byte),
             })),
-            2 => {
+            2 => events.push(Ok(InferenceEvent::ThinkingSignatureDelta {
+                signature: format!("s{:02x}", byte),
+            })),
+            3 => {
                 tool_seq += 1;
                 events.push(Ok(InferenceEvent::ToolCallStart {
                     id: format!("call_{}_{}", idx, tool_seq),
                     name: "tool".to_string(),
                 }));
             }
-            3 => events.push(Ok(InferenceEvent::ToolCallDelta {
+            4 => events.push(Ok(InferenceEvent::ToolCallDelta {
                 delta: format!("{{\"b\":{}}}", byte),
             })),
-            4 => {
+            5 => {
                 events.push(Ok(InferenceEvent::MessageEnd {
                     input_tokens: (idx % 128) as u32,
                     output_tokens: ((idx + 1) % 128) as u32,
@@ -69,7 +72,7 @@ fn synthesize_events(data: &[u8]) -> Vec<Result<InferenceEvent, SdkError>> {
                 }));
                 break;
             }
-            5 => events.push(Ok(InferenceEvent::MessageStart {
+            6 => events.push(Ok(InferenceEvent::MessageStart {
                 role: "assistant".to_string(),
                 model: "dup-model".to_string(),
                 provider_id: "fuzz".to_string(),

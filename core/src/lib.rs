@@ -128,6 +128,8 @@ pub enum InferenceContent {
     },
     Thinking {
         content: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        signature: Option<String>,
     },
 }
 
@@ -244,12 +246,32 @@ impl InferenceResult {
                             }
                         }
                         InferenceEvent::ThinkingDelta { content } => {
-                            if let Some(InferenceContent::Thinking { content: text }) =
+                            if let Some(InferenceContent::Thinking { content: text, .. }) =
                                 content_parts.last_mut()
                             {
                                 text.push_str(&content);
                             } else {
-                                content_parts.push(InferenceContent::Thinking { content });
+                                content_parts.push(InferenceContent::Thinking {
+                                    content,
+                                    signature: None,
+                                });
+                            }
+                        }
+                        InferenceEvent::ThinkingSignatureDelta { signature } => {
+                            if let Some(InferenceContent::Thinking {
+                                signature: existing, ..
+                            }) = content_parts.last_mut()
+                            {
+                                if let Some(existing) = existing.as_mut() {
+                                    existing.push_str(&signature);
+                                } else {
+                                    *existing = Some(signature);
+                                }
+                            } else {
+                                content_parts.push(InferenceContent::Thinking {
+                                    content: String::new(),
+                                    signature: Some(signature),
+                                });
                             }
                         }
                         InferenceEvent::ToolCallStart { id, name } => {
@@ -323,6 +345,8 @@ pub enum InferenceEvent {
     MessageDelta { content: String },
     /// A thought process delta (for reasoning models).
     ThinkingDelta { content: String },
+    /// A signature delta for a thinking block (Anthropic-compatible providers).
+    ThinkingSignatureDelta { signature: String },
     /// A tool call started.
     ToolCallStart { id: String, name: String },
     /// A delta for a tool call argument (JSON fragment).

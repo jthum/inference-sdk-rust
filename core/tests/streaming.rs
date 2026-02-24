@@ -21,6 +21,12 @@ async fn test_from_stream_accumulates_tool_calls() {
         Ok(InferenceEvent::ThinkingDelta {
             content: "I should check the weather.".to_string(),
         }),
+        Ok(InferenceEvent::ThinkingSignatureDelta {
+            signature: "sig_part_1".to_string(),
+        }),
+        Ok(InferenceEvent::ThinkingSignatureDelta {
+            signature: "_sig_part_2".to_string(),
+        }),
         Ok(InferenceEvent::ToolCallStart {
             id: tool_id.to_string(),
             name: tool_name.to_string(),
@@ -53,8 +59,9 @@ async fn test_from_stream_accumulates_tool_calls() {
         _ => panic!("Expected Text"),
     }
     match &result.content[1] {
-        InferenceContent::Thinking { content } => {
-            assert_eq!(content, "I should check the weather.")
+        InferenceContent::Thinking { content, signature } => {
+            assert_eq!(content, "I should check the weather.");
+            assert_eq!(signature.as_deref(), Some("sig_part_1_sig_part_2"));
         }
         _ => panic!("Expected Thinking"),
     }
@@ -66,6 +73,38 @@ async fn test_from_stream_accumulates_tool_calls() {
         }
         _ => panic!("Expected ToolUse"),
     }
+}
+
+#[tokio::test]
+async fn test_from_stream_allows_signature_delta_before_thinking_delta() {
+    let events = vec![
+        Ok(InferenceEvent::MessageStart {
+            role: "assistant".to_string(),
+            model: "test-model".to_string(),
+            provider_id: "test".to_string(),
+        }),
+        Ok(InferenceEvent::ThinkingSignatureDelta {
+            signature: "sig_only".to_string(),
+        }),
+        Ok(InferenceEvent::MessageEnd {
+            input_tokens: 1,
+            output_tokens: 1,
+            stop_reason: Some(StopReason::EndTurn),
+        }),
+    ];
+
+    let stream = Box::pin(stream::iter(events));
+    let result = InferenceResult::from_stream(stream)
+        .await
+        .expect("Stream failed");
+
+    assert!(matches!(
+        result.content.first(),
+        Some(InferenceContent::Thinking {
+            content,
+            signature: Some(signature),
+        }) if content.is_empty() && signature == "sig_only"
+    ));
 }
 
 #[tokio::test]

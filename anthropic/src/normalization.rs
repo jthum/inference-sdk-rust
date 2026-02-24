@@ -32,12 +32,17 @@ pub fn to_anthropic_request(
                     match content {
                         InferenceContent::Text { text } => {
                             content_blocks.push(types::message::ContentBlock::Text { text });
-                        }
-                        InferenceContent::ToolUse { id, name, input } => {
+                        }                        InferenceContent::ToolUse { id, name, input } => {
                             content_blocks.push(types::message::ContentBlock::ToolUse {
                                 id,
                                 name,
                                 input,
+                            });
+                        }
+                        InferenceContent::Thinking { content } => {
+                            content_blocks.push(types::message::ContentBlock::Thinking {
+                                thinking: content,
+                                signature: None,
                             });
                         }
                         _ => {}
@@ -62,10 +67,8 @@ pub fn to_anthropic_request(
                     {
                         content_blocks.push(types::message::ContentBlock::ToolResult {
                             tool_use_id,
-                            content: Some(vec![types::message::ContentBlock::Text {
-                                text: content,
-                            }]),
-                            is_error: Some(is_error),
+                            content: Some(types::message::ToolResultContent::Text(content)),
+                            is_error: is_error.then_some(true),
                         });
                     }
                 }
@@ -262,5 +265,87 @@ mod tests {
             events[0],
             Ok(InferenceEvent::ToolCallDelta { ref delta }) if delta == "{\"city\":\"S"
         ));
+    }
+}
+
+#[cfg(test)]
+mod request_normalization_tests {
+    use super::to_anthropic_request;
+    use inference_sdk_core::{InferenceContent, InferenceMessage, InferenceRequest, InferenceRole};
+
+    #[test]
+    fn preserves_assistant_thinking_blocks_in_request_history() {
+        let req = InferenceRequest::builder()
+            .model("test-model")
+            .messages(vec![InferenceMessage {
+                role: InferenceRole::Assistant,
+                content: vec![
+                    InferenceContent::Thinking {
+                        content: "deliberation".to_string(),
+                    },
+                    InferenceContent::ToolUse {
+                        id: "toolu_1".to_string(),
+                        name: "read_file".to_string(),
+                        input: serde_json::json!({ "path": "nonce.txt" }),
+                    },
+                ],
+                tool_call_id: None,
+            }])
+            .max_tokens(128)
+            .build();
+
+        let out = to_anthropic_request(req).expect("request should normalize");
+        assert_eq!(out.messages.len(), 1);
+
+        match &out.messages[0].content {
+            crate::types::message::Content::Blocks(blocks) => {
+                assert!(matches!(
+                    &blocks[0],
+                    crate::types::message::ContentBlock::Thinking {
+                        thinking,
+                        signature: None,
+                    } if thinking == "deliberation"
+                ));
+                assert!(matches!(
+                    &blocks[1],
+                    crate::types::message::ContentBlock::ToolUse { id, name, .. }
+                    if id == "toolu_1" && name == "read_file"
+                ));
+            }
+            other => panic!("unexpected content form: {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tool_result_request_shape_tests {
+    use super::to_anthropic_request;
+    use inference_sdk_core::{InferenceContent, InferenceMessage, InferenceRequest, InferenceRole};
+
+    #[test]
+    fn tool_results_serialize_as_string_content_and_omit_false_is_error() {
+        let req = InferenceRequest::builder()
+            .model("test-model")
+            .messages(vec![InferenceMessage {
+                role: InferenceRole::Tool,
+                content: vec![InferenceContent::ToolResult {
+                    tool_use_id: "toolu_1".to_string(),
+                    content: "ok".to_string(),
+                    is_error: false,
+                }],
+                tool_call_id: Some("toolu_1".to_string()),
+            }])
+            .max_tokens(128)
+            .build();
+
+        let out = to_anthropic_request(req).expect("request should normalize");
+        let json = serde_json::to_value(out).expect("request should serialize");
+        let block = &json["messages"][0]["content"][0];
+
+        assert_eq!(json["messages"][0]["role"], "user");
+        assert_eq!(block["type"], "tool_result");
+        assert_eq!(block["tool_use_id"], "toolu_1");
+        assert_eq!(block["content"], "ok");
+        assert!(block.get("is_error").is_none(), "is_error=false should be omitted");
     }
 }

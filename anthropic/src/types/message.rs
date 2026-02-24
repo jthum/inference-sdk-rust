@@ -34,7 +34,9 @@ pub enum ContentBlock {
     },
     ToolResult {
         tool_use_id: String,
-        content: Option<Vec<ContentBlock>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        content: Option<ToolResultContent>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
     },
     Thinking {
@@ -45,6 +47,13 @@ pub enum ContentBlock {
     RedactedThinking {
         data: String,
     },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ToolResultContent {
+    Text(String),
+    Blocks(Vec<ContentBlock>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

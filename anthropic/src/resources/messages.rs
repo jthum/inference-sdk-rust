@@ -7,6 +7,26 @@ use inference_sdk_core::RequestOptions;
 use inference_sdk_core::SdkError;
 use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+
+
+static REQUEST_DUMP_SEQ: AtomicU64 = AtomicU64::new(1);
+
+fn maybe_dump_request(kind: &str, base_url: &str, request: &MessageRequest) {
+    if std::env::var_os("ANTHROPIC_SDK_DEBUG_REQUESTS").is_none() {
+        return;
+    }
+    let seq = REQUEST_DUMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    match serde_json::to_string_pretty(request) {
+        Ok(json) => eprintln!(
+            "\n=== anthropic-sdk request #{seq} ({kind}) {base_url}/messages ===\n{json}\n"
+        ),
+        Err(err) => eprintln!(
+            "\n=== anthropic-sdk request #{seq} ({kind}) {base_url}/messages ===\n<serialize error: {err}>\n"
+        ),
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct MessagesResource {
@@ -38,6 +58,7 @@ impl MessagesResource {
             retry_policy: self.client.config.retry_policy.clone(),
             timeout_policy: self.client.config.timeout_policy.clone(),
         };
+        maybe_dump_request("create", &self.client.config.base_url, &request);
         let response =
             send_with_retry(&self.client.http_client, &config, &request, &options).await?;
         response
@@ -73,6 +94,7 @@ impl MessagesResource {
             retry_policy: self.client.config.retry_policy.clone(),
             timeout_policy: self.client.config.timeout_policy.clone(),
         };
+        maybe_dump_request("create_stream", &self.client.config.base_url, &request);
         let response =
             send_with_retry(&self.client.http_client, &config, &request, &options).await?;
 

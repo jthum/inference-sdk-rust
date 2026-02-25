@@ -8,6 +8,33 @@ use futures_util::StreamExt;
 use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use inference_sdk_core::{RequestOptions, SdkError};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static REQUEST_DUMP_SEQ: AtomicU64 = AtomicU64::new(1);
+
+fn maybe_dump_request(kind: &str, base_url: &str, request: &ChatCompletionRequest) {
+    if std::env::var_os("OPENAI_SDK_DEBUG_REQUESTS").is_none() {
+        return;
+    }
+    let seq = REQUEST_DUMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    match serde_json::to_string_pretty(request) {
+        Ok(json) => eprintln!(
+            "\n=== openai-sdk request #{seq} ({kind}) {base_url}/chat/completions ===\n{json}\n"
+        ),
+        Err(err) => eprintln!(
+            "\n=== openai-sdk request #{seq} ({kind}) {base_url}/chat/completions ===\n<serialize error: {err}>\n"
+        ),
+    }
+}
+
+fn maybe_dump_sse_event(base_url: &str, event_name: &str, data: &str) {
+    if std::env::var_os("OPENAI_SDK_DEBUG_REQUESTS").is_none() {
+        return;
+    }
+    eprintln!(
+        "\n=== openai-sdk sse event {base_url}/chat/completions event={event_name:?} ===\n{data}\n"
+    );
+}
 
 #[derive(Clone, Debug)]
 pub struct ChatResource {
@@ -39,6 +66,8 @@ impl ChatResource {
             retry_policy: self.client.config.retry_policy.clone(),
             timeout_policy: self.client.config.timeout_policy.clone(),
         };
+        maybe_dump_request("create", &self.client.config.base_url, &request);
+        maybe_dump_request("create_stream", &self.client.config.base_url, &request);
         let response =
             send_with_retry(&self.client.http_client, &config, &request, &options).await?;
         response
@@ -84,20 +113,25 @@ impl ChatResource {
         let response =
             send_with_retry(&self.client.http_client, &config, &request, &options).await?;
         let stream = response.bytes_stream().eventsource();
+        let debug_base_url = self.client.config.base_url.clone();
 
-        let mapped_stream = stream.filter_map(|event_result| async move {
-            match event_result {
-                Ok(event) => {
-                    // OpenAI signals end of stream with `data: [DONE]`
-                    if event.data == "[DONE]" {
-                        return None;
+        let mapped_stream = stream.filter_map(move |event_result| {
+            let debug_base_url = debug_base_url.clone();
+            async move {
+                match event_result {
+                    Ok(event) => {
+                        maybe_dump_sse_event(&debug_base_url, &event.event, &event.data);
+                        // OpenAI signals end of stream with `data: [DONE]`
+                        if event.data == "[DONE]" {
+                            return None;
+                        }
+                        Some(
+                            serde_json::from_str::<ChatCompletionChunk>(&event.data)
+                                .map_err(SdkError::SerializationError),
+                        )
                     }
-                    Some(
-                        serde_json::from_str::<ChatCompletionChunk>(&event.data)
-                            .map_err(SdkError::SerializationError),
-                    )
+                    Err(e) => Some(Err(SdkError::StreamError(e.to_string()))),
                 }
-                Err(e) => Some(Err(SdkError::StreamError(e.to_string()))),
             }
         });
 

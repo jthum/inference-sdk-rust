@@ -111,12 +111,19 @@ pub fn to_openai_request(
             .collect()
     });
 
+    let tool_choice = if tools.as_ref().is_some_and(|ts| !ts.is_empty()) {
+        Some(types::chat::ToolChoice::Mode("auto".to_string()))
+    } else {
+        None
+    };
+
     Ok(types::chat::ChatCompletionRequest::builder()
         .model(req.model)
         .messages(messages)
         .maybe_temperature(req.temperature)
         .maybe_max_tokens(req.max_tokens)
         .maybe_tools(tools)
+        .maybe_tool_choice(tool_choice)
         .build())
 }
 
@@ -312,5 +319,60 @@ mod tests {
                 stop_reason: Some(StopReason::EndTurn)
             })
         ));
+    }
+
+    #[test]
+    fn test_to_openai_request_sets_tool_choice_auto_when_tools_present() {
+        let req = InferenceRequest {
+            model: "gpt-4o-mini".to_string(),
+            messages: vec![inference_sdk_core::InferenceMessage {
+                role: InferenceRole::User,
+                content: vec![InferenceContent::Text {
+                    text: "hello".to_string(),
+                }],
+                tool_call_id: None,
+            }],
+            system: None,
+            tools: Some(vec![inference_sdk_core::Tool {
+                name: "read_file".to_string(),
+                description: "Read file".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"]
+                }),
+            }]),
+            temperature: None,
+            max_tokens: None,
+            thinking_budget: None,
+        };
+
+        let out = to_openai_request(req).expect("request normalization");
+        assert!(matches!(
+            out.tool_choice,
+            Some(types::chat::ToolChoice::Mode(ref mode)) if mode == "auto"
+        ));
+    }
+
+    #[test]
+    fn test_to_openai_request_omits_tool_choice_without_tools() {
+        let req = InferenceRequest {
+            model: "gpt-4o-mini".to_string(),
+            messages: vec![inference_sdk_core::InferenceMessage {
+                role: InferenceRole::User,
+                content: vec![InferenceContent::Text {
+                    text: "hello".to_string(),
+                }],
+                tool_call_id: None,
+            }],
+            system: None,
+            tools: None,
+            temperature: None,
+            max_tokens: None,
+            thinking_budget: None,
+        };
+
+        let out = to_openai_request(req).expect("request normalization");
+        assert!(out.tool_choice.is_none());
     }
 }

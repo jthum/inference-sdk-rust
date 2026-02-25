@@ -32,7 +32,8 @@ pub fn to_anthropic_request(
                     match content {
                         InferenceContent::Text { text } => {
                             content_blocks.push(types::message::ContentBlock::Text { text });
-                        }                        InferenceContent::ToolUse { id, name, input } => {
+                        }
+                        InferenceContent::ToolUse { id, name, input } => {
                             content_blocks.push(types::message::ContentBlock::ToolUse {
                                 id,
                                 name,
@@ -366,6 +367,9 @@ mod tool_result_request_shape_tests {
         assert_eq!(block["type"], "tool_result");
         assert_eq!(block["tool_use_id"], "toolu_1");
         assert_eq!(block["content"], "ok");
-        assert!(block.get("is_error").is_none(), "is_error=false should be omitted");
+        assert!(
+            block.get("is_error").is_none(),
+            "is_error=false should be omitted"
+        );
     }
 }

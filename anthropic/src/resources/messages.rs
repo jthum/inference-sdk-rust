@@ -9,8 +9,6 @@ use inference_sdk_core::http::{RetryConfig, send_with_retry};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-
-
 static REQUEST_DUMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
 fn maybe_dump_request(kind: &str, base_url: &str, request: &MessageRequest) {

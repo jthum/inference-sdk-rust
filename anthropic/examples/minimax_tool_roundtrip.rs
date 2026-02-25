@@ -1,8 +1,8 @@
+use anthropic_sdk::normalization::to_anthropic_request;
 use anthropic_sdk::{
     Client, ClientConfig, InferenceContent, InferenceMessage, InferenceProvider, InferenceRequest,
     InferenceRole,
 };
-use anthropic_sdk::normalization::to_anthropic_request;
 use inference_sdk_core::Tool;
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -102,10 +102,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dump_normalized_request("TURN 1", &req1);
     let res1 = client.complete(req1.clone(), None).await?;
     println!("Turn 1 stop_reason: {:?}", res1.stop_reason);
-    println!("Turn 1 content: {}", serde_json::to_string_pretty(&res1.content)?);
+    println!(
+        "Turn 1 content: {}",
+        serde_json::to_string_pretty(&res1.content)?
+    );
 
-    let tool_use_id = first_tool_use_id(&res1.content)
-        .ok_or_else(|| format!("model did not emit a tool call; response text={}", res1.text()))?;
+    let tool_use_id = first_tool_use_id(&res1.content).ok_or_else(|| {
+        format!(
+            "model did not emit a tool call; response text={}",
+            res1.text()
+        )
+    })?;
     println!("Tool use id: {tool_use_id}");
 
     let req2 = InferenceRequest {
@@ -113,9 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         messages: vec![
             InferenceMessage {
                 role: InferenceRole::User,
-                content: vec![InferenceContent::Text {
-                    text: user_prompt,
-                }],
+                content: vec![InferenceContent::Text { text: user_prompt }],
                 tool_call_id: None,
             },
             InferenceMessage {
@@ -144,16 +149,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let res2 = client.complete(req2, None).await?;
     println!("Turn 2 stop_reason: {:?}", res2.stop_reason);
     println!("Turn 2 text: {}", res2.text());
-    println!("Turn 2 content: {}", serde_json::to_string_pretty(&res2.content)?);
+    println!(
+        "Turn 2 content: {}",
+        serde_json::to_string_pretty(&res2.content)?
+    );
 
     if res2.text().trim() == nonce {
         println!("\\nMINIMAX_TOOL_ROUNDTRIP_OK");
         Ok(())
     } else {
-        Err(format!(
-            "unexpected final text (expected nonce): {:?}",
-            res2.text()
-        )
-        .into())
+        Err(format!("unexpected final text (expected nonce): {:?}", res2.text()).into())
     }
 }

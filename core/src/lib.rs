@@ -259,7 +259,8 @@ impl InferenceResult {
                         }
                         InferenceEvent::ThinkingSignatureDelta { signature } => {
                             if let Some(InferenceContent::Thinking {
-                                signature: existing, ..
+                                signature: existing,
+                                ..
                             }) = content_parts.last_mut()
                             {
                                 if let Some(existing) = existing.as_mut() {

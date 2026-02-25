@@ -130,6 +130,7 @@ pub fn to_openai_request(
 #[derive(Default)]
 pub struct OpenAiStreamAdapter {
     stop_reason: Option<StopReason>,
+    message_started: bool,
 }
 
 impl OpenAiStreamAdapter {
@@ -155,11 +156,15 @@ impl OpenAiStreamAdapter {
         }
 
         let choice = &chunk.choices[0];
+        let model_name = chunk.model.clone();
 
-        if let Some(types::chat::ChatRole::Assistant) = &choice.delta.role {
+        if let Some(types::chat::ChatRole::Assistant) = &choice.delta.role
+            && !self.message_started
+        {
+            self.message_started = true;
             events.push(Ok(InferenceEvent::MessageStart {
                 role: "assistant".to_string(),
-                model: chunk.model,
+                model: model_name,
                 provider_id: "openai".to_string(),
             }));
         }
@@ -201,6 +206,21 @@ impl OpenAiStreamAdapter {
                 "content_filter" => StopReason::Unknown,
                 _ => StopReason::Unknown,
             });
+        }
+
+        // Some OpenAI-compatible providers (e.g. MiniMax) emit the final usage chunk
+        // with a non-empty `choices` array containing only an empty delta (often with
+        // repeated assistant role) instead of the OpenAI-style empty-choices usage chunk.
+        if let Some(usage) = chunk.usage {
+            let empty_content = choice.delta.content.as_deref().is_none_or(str::is_empty);
+            let no_tool_calls = choice.delta.tool_calls.as_ref().is_none_or(Vec::is_empty);
+            if empty_content && no_tool_calls {
+                events.push(Ok(InferenceEvent::MessageEnd {
+                    input_tokens: usage.prompt_tokens,
+                    output_tokens: usage.completion_tokens,
+                    stop_reason: self.stop_reason.clone(),
+                }));
+            }
         }
 
         events
@@ -245,6 +265,38 @@ mod tests {
             created: 1234567891,
             model: "gpt-4o".to_string(),
             choices: vec![],
+            usage: Some(Usage {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens: prompt_tokens + completion_tokens,
+            }),
+            system_fingerprint: None,
+        }
+    }
+
+    fn make_mixed_usage_chunk(
+        content: Option<&str>,
+        role: Option<types::chat::ChatRole>,
+        tool_calls: Option<Vec<ChunkToolCall>>,
+        finish_reason: Option<String>,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+    ) -> ChatCompletionChunk {
+        ChatCompletionChunk {
+            id: "chk_usage_mixed".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1234567892,
+            model: "gpt-4o".to_string(),
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: ChunkDelta {
+                    role,
+                    content: content.map(str::to_string),
+                    tool_calls,
+                },
+                finish_reason,
+                logprobs: None,
+            }],
             usage: Some(Usage {
                 prompt_tokens,
                 completion_tokens,
@@ -319,6 +371,91 @@ mod tests {
                 stop_reason: Some(StopReason::EndTurn)
             })
         ));
+    }
+
+    #[test]
+    fn test_openai_adapter_emits_message_end_from_mixed_usage_chunk() {
+        let mut adapter = OpenAiStreamAdapter::new();
+        // Provider repeats assistant role on content chunks; adapter should only emit one MessageStart.
+        let start_chunk = ChatCompletionChunk {
+            id: "chk_start".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1234567890,
+            model: "gpt-4o".to_string(),
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: ChunkDelta {
+                    role: Some(types::chat::ChatRole::Assistant),
+                    content: Some("hi".to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+        let ev1 = adapter.process_chunk(start_chunk);
+        assert_eq!(ev1.len(), 2);
+        assert!(matches!(ev1[0], Ok(InferenceEvent::MessageStart { .. })));
+        assert!(matches!(ev1[1], Ok(InferenceEvent::MessageDelta { .. })));
+
+        let usage_chunk = make_mixed_usage_chunk(
+            Some(""),
+            Some(types::chat::ChatRole::Assistant),
+            None,
+            None,
+            10,
+            20,
+        );
+        let ev2 = adapter.process_chunk(usage_chunk);
+        assert_eq!(ev2.len(), 1);
+        assert!(matches!(
+            ev2[0],
+            Ok(InferenceEvent::MessageEnd {
+                input_tokens: 10,
+                output_tokens: 20,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_openai_adapter_avoids_duplicate_message_start_when_role_repeats() {
+        let mut adapter = OpenAiStreamAdapter::new();
+        let mk = |content: &str| ChatCompletionChunk {
+            id: "chk_rep".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            created: 1234567890,
+            model: "gpt-4o".to_string(),
+            choices: vec![ChunkChoice {
+                index: 0,
+                delta: ChunkDelta {
+                    role: Some(types::chat::ChatRole::Assistant),
+                    content: Some(content.to_string()),
+                    tool_calls: None,
+                },
+                finish_reason: None,
+                logprobs: None,
+            }],
+            usage: None,
+            system_fingerprint: None,
+        };
+        let ev1 = adapter.process_chunk(mk("a"));
+        let ev2 = adapter.process_chunk(mk("b"));
+        assert!(matches!(ev1[0], Ok(InferenceEvent::MessageStart { .. })));
+        assert_eq!(
+            ev1.iter()
+                .filter(|e| matches!(e, Ok(InferenceEvent::MessageStart { .. })))
+                .count(),
+            1
+        );
+        assert_eq!(
+            ev2.iter()
+                .filter(|e| matches!(e, Ok(InferenceEvent::MessageStart { .. })))
+                .count(),
+            0
+        );
     }
 
     #[test]

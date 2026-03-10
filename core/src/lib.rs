@@ -35,6 +35,60 @@ pub trait InferenceProvider: Send + Sync {
 pub type InferenceStream =
     Pin<Box<dyn Stream<Item = Result<InferenceEvent, SdkError>> + Send + 'static>>;
 
+/// A provider that can generate embedding vectors.
+pub trait EmbeddingProvider: Send + Sync {
+    fn embed<'a>(
+        &'a self,
+        request: EmbeddingRequest,
+        options: Option<RequestOptions>,
+    ) -> BoxFuture<'a, Result<EmbeddingResponse, SdkError>>;
+}
+
+/// A standardized request for embedding generation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingRequest {
+    pub model: String,
+    pub input: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimensions: Option<u32>,
+}
+
+#[bon::bon]
+impl EmbeddingRequest {
+    #[builder]
+    pub fn new(
+        #[builder(into)] model: String,
+        input: Vec<String>,
+        dimensions: Option<u32>,
+    ) -> Self {
+        Self {
+            model,
+            input,
+            dimensions,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingResponse {
+    pub data: Vec<EmbeddingData>,
+    pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<EmbeddingUsage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingData {
+    pub embedding: Vec<f32>,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmbeddingUsage {
+    pub input_tokens: u32,
+    pub total_tokens: u32,
+}
+
 /// A standardized request for LLM inference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceRequest {

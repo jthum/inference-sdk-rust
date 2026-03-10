@@ -3,10 +3,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, bon::Builder)]
 pub struct EmbeddingRequest {
     /// Input text to get embeddings for, encoded as a string or array of tokens.
-    pub input: String, // Simplifying to String for now, could be Vec<String> or Vec<u32>
+    pub input: Vec<String>,
 
     /// ID of the model to use.
     pub model: String,
+
+    /// Optional output dimensions for providers/models that support down-projection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimensions: Option<u32>,
 
     /// The format to return the embeddings in. Can be either `float` or `base64`.
     #[serde(skip_serializing_if = "Option::is_none")]

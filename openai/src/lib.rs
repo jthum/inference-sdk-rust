@@ -6,9 +6,12 @@ pub mod types;
 pub use client::{Client, ClientConfig};
 use futures_util::{StreamExt, future::BoxFuture};
 pub use inference_sdk_core::{
-    InferenceContent, InferenceEvent, InferenceMessage, InferenceProvider, InferenceRequest,
-    InferenceResult, InferenceRole, InferenceStream, RequestOptions, RetryNetworkRule, RetryPolicy,
-    RetryStatusRule, SdkError, StopReason, TimeoutPolicy, Usage,
+    EmbeddingData as ProviderEmbeddingData, EmbeddingProvider,
+    EmbeddingRequest as ProviderEmbeddingRequest, EmbeddingResponse as ProviderEmbeddingResponse,
+    EmbeddingUsage as ProviderEmbeddingUsage, InferenceContent, InferenceEvent, InferenceMessage,
+    InferenceProvider, InferenceRequest, InferenceResult, InferenceRole, InferenceStream,
+    RequestOptions, RetryNetworkRule, RetryPolicy, RetryStatusRule, SdkError, StopReason,
+    TimeoutPolicy, Usage,
 };
 pub use types::embedding::EmbeddingRequest;
 
@@ -42,6 +45,44 @@ impl InferenceProvider for Client {
             let flat_stream = mapped_stream.flat_map(futures_util::stream::iter);
 
             Ok(Box::pin(flat_stream) as InferenceStream)
+        })
+    }
+}
+
+impl EmbeddingProvider for Client {
+    fn embed<'a>(
+        &'a self,
+        request: ProviderEmbeddingRequest,
+        options: Option<RequestOptions>,
+    ) -> BoxFuture<'a, Result<ProviderEmbeddingResponse, SdkError>> {
+        Box::pin(async move {
+            let response = self
+                .embeddings()
+                .create_with_options(
+                    EmbeddingRequest::builder()
+                        .input(request.input)
+                        .model(request.model)
+                        .maybe_dimensions(request.dimensions)
+                        .build(),
+                    options.unwrap_or_default(),
+                )
+                .await?;
+
+            Ok(ProviderEmbeddingResponse {
+                data: response
+                    .data
+                    .into_iter()
+                    .map(|row| ProviderEmbeddingData {
+                        embedding: row.embedding,
+                        index: row.index,
+                    })
+                    .collect(),
+                model: response.model,
+                usage: Some(ProviderEmbeddingUsage {
+                    input_tokens: response.usage.prompt_tokens,
+                    total_tokens: response.usage.total_tokens,
+                }),
+            })
         })
     }
 }

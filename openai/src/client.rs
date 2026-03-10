@@ -35,12 +35,13 @@ impl fmt::Debug for ClientConfig {
 
 impl ClientConfig {
     pub fn new(api_key: String) -> Result<Self, SdkError> {
-        let bearer = format!("Bearer {}", api_key);
-        let auth_value = HeaderValue::from_str(&bearer)
-            .map_err(|e| SdkError::ConfigError(format!("Invalid API key: {}", e)))?;
-
         let mut headers = HeaderMap::new();
-        headers.insert(AUTHORIZATION, auth_value);
+        if !api_key.is_empty() {
+            let bearer = format!("Bearer {}", api_key);
+            let auth_value = HeaderValue::from_str(&bearer)
+                .map_err(|e| SdkError::ConfigError(format!("Invalid API key: {}", e)))?;
+            headers.insert(AUTHORIZATION, auth_value);
+        }
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
         Ok(Self {

@@ -8,3 +8,4 @@ inference-sdk-core = { workspace = true }
 openai-sdk = { workspace = true }
 anthropic-sdk = { workspace = true }
 thiserror = { workspace = true }
+futures-util = { workspace = true }

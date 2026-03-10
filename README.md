@@ -6,14 +6,16 @@ A modular Rust workspace for interacting with LLM inference APIs. Each provider 
 
 | Crate | Description |
 |-------|-------------|
-| [`inference-sdk-core`](core/) | **Normalization Layer**: Traits (`InferenceProvider`), standardized types (`InferenceRequest`, `InferenceEvent`), and shared logic. |
+| [`inference-sdk-core`](core/) | **Normalization Layer**: Traits (`InferenceProvider`, `EmbeddingProvider`), standardized inference/embedding types, and shared logic. |
 | [`anthropic-sdk`](anthropic/) | Anthropic Messages API implementation. |
 | [`openai-sdk`](openai/) | OpenAI Chat & Embeddings API implementation. |
-| [`inference-sdk-registry`](registry/) | Provider driver registry/factory for building `Arc<dyn InferenceProvider>` from generic driver config. |
+| [`inference-sdk-registry`](registry/) | Provider driver registry/factory for building inference and embedding providers from generic driver config. |
 
 ## Normalization Layer
 
-The SDK provides a unified `InferenceProvider` trait, allowing you to write provider-agnostic code:
+The SDK provides unified provider traits so you can write provider-agnostic inference and embedding code.
+
+For inference, use `InferenceProvider`:
 
 ```rust
 use inference_sdk_core::{
@@ -99,10 +101,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```
 inference-sdk-rust/
-├── core/        → Normalization Layer: InferenceProvider trait, unified Request/Event types.
+├── core/        → Normalization Layer: inference + embeddings traits and shared types.
 ├── anthropic/   → Implementation of InferenceProvider for Claude.
 ├── openai/      → Implementation of InferenceProvider for GPT/Embeddings.
-└── registry/    → Driver registry/factory for provider instantiation.
+└── registry/    → Driver registry/factory for inference and embedding provider instantiation.
 ```
 
 ## Quality and Contract Docs

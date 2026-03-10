@@ -2,6 +2,19 @@
 
 This file tracks consumer-facing migration notes for releases with behavioral or API changes.
 
+## 0.7.0
+
+### Breaking changes
+None.
+
+### Behavioral changes
+1. Embeddings are now a first-class provider surface in the shared registry layer instead of downstream-only ad hoc wiring.
+
+### New capabilities
+1. Added provider-agnostic embeddings support to `inference-sdk-core`.
+2. Added registry-backed embedding provider construction in `inference-sdk-registry`.
+3. OpenAI-compatible embedding endpoints can now be targeted with custom `base_url` values, including local embedding servers.
+
 ## 0.5.0
 
 ### Breaking changes

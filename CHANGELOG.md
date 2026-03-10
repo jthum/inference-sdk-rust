@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-10
+
+### Added
+- **Provider-Agnostic Embeddings**
+  - Added a shared embeddings contract to `inference-sdk-core`.
+  - Added embedding-driver registry support in `inference-sdk-registry`.
+  - OpenAI-compatible drivers can now be built for embeddings through the same generic registry path used for inference providers.
+- **OpenAI-Compatible Base URL Embeddings**
+  - `openai-sdk` now supports embedding calls against custom OpenAI-compatible `base_url` endpoints.
+  - This enables local embedding servers without downstream provider-specific glue code.
+
+### Changed
+- **Version Alignment**
+  - Bumped `inference-sdk-core`, `anthropic-sdk`, `openai-sdk`, and `inference-sdk-registry` crate versions to `0.7.0`.
+- **Registry Scope**
+  - `inference-sdk-registry` is now the shared construction layer for both inference providers and embedding providers.
+
 ## [0.5.0] - 2026-02-19
 
 ### Added

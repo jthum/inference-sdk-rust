@@ -7,6 +7,13 @@ use inference_sdk_core::{
 pub fn to_anthropic_request(
     req: InferenceRequest,
 ) -> Result<types::message::MessageRequest, SdkError> {
+    if req.response_format.is_some() {
+        return Err(SdkError::ConfigError(
+            "structured response_format is not supported by the anthropic provider driver"
+                .to_string(),
+        ));
+    }
+
     let mut messages = Vec::new();
 
     for msg in req.messages {
@@ -291,7 +298,10 @@ mod tests {
 #[cfg(test)]
 mod request_normalization_tests {
     use super::to_anthropic_request;
-    use inference_sdk_core::{InferenceContent, InferenceMessage, InferenceRequest, InferenceRole};
+    use inference_sdk_core::{
+        InferenceContent, InferenceMessage, InferenceRequest, InferenceResponseFormat,
+        InferenceRole,
+    };
 
     #[test]
     fn preserves_assistant_thinking_blocks_in_request_history() {
@@ -335,6 +345,29 @@ mod request_normalization_tests {
             }
             other => panic!("unexpected content form: {other:?}"),
         }
+    }
+
+    #[test]
+    fn rejects_structured_response_format_hints() {
+        let req = InferenceRequest::builder()
+            .model("test-model")
+            .messages(vec![InferenceMessage {
+                role: InferenceRole::User,
+                content: vec![InferenceContent::Text {
+                    text: "hello".to_string(),
+                }],
+                tool_call_id: None,
+            }])
+            .max_tokens(128)
+            .response_format(InferenceResponseFormat::JsonObject)
+            .build();
+
+        let err = to_anthropic_request(req).expect_err("request should reject response_format");
+        assert!(matches!(err, inference_sdk_core::SdkError::ConfigError(_)));
+        assert!(
+            err.to_string().contains("structured response_format"),
+            "unexpected error: {err}"
+        );
     }
 }
 

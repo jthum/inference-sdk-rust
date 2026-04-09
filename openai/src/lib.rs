@@ -9,13 +9,22 @@ pub use inference_sdk_core::{
     EmbeddingData as ProviderEmbeddingData, EmbeddingProvider,
     EmbeddingRequest as ProviderEmbeddingRequest, EmbeddingResponse as ProviderEmbeddingResponse,
     EmbeddingUsage as ProviderEmbeddingUsage, InferenceContent, InferenceEvent, InferenceMessage,
-    InferenceProvider, InferenceRequest, InferenceResult, InferenceRole, InferenceStream,
-    RequestOptions, RetryNetworkRule, RetryPolicy, RetryStatusRule, SdkError, StopReason,
-    TimeoutPolicy, Usage,
+    InferenceProvider, InferenceRequest, InferenceResponseFormat, InferenceResult, InferenceRole,
+    InferenceStream, RequestOptions, RetryNetworkRule, RetryPolicy, RetryStatusRule, SdkError,
+    StopReason, TimeoutPolicy, Usage,
 };
 pub use types::embedding::EmbeddingRequest;
 
 impl InferenceProvider for Client {
+    fn supports_response_format(&self, response_format: &InferenceResponseFormat) -> bool {
+        matches!(
+            response_format,
+            InferenceResponseFormat::Text
+                | InferenceResponseFormat::JsonObject
+                | InferenceResponseFormat::JsonSchema { .. }
+        )
+    }
+
     // Default complete() implementation from trait is used.
 
     fn stream<'a>(

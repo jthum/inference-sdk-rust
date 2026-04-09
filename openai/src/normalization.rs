@@ -1,6 +1,7 @@
 use crate::types;
 use inference_sdk_core::{
-    InferenceContent, InferenceEvent, InferenceRequest, InferenceRole, SdkError, StopReason,
+    InferenceContent, InferenceEvent, InferenceRequest, InferenceResponseFormat, InferenceRole,
+    SdkError, StopReason,
 };
 
 pub fn to_openai_request(
@@ -117,6 +118,11 @@ pub fn to_openai_request(
         None
     };
 
+    let response_format = req
+        .response_format
+        .map(normalize_response_format)
+        .transpose()?;
+
     Ok(types::chat::ChatCompletionRequest::builder()
         .model(req.model)
         .messages(messages)
@@ -124,7 +130,27 @@ pub fn to_openai_request(
         .maybe_max_tokens(req.max_tokens)
         .maybe_tools(tools)
         .maybe_tool_choice(tool_choice)
+        .maybe_response_format(response_format)
         .build())
+}
+
+fn normalize_response_format(
+    response_format: InferenceResponseFormat,
+) -> Result<types::chat::ResponseFormat, SdkError> {
+    Ok(match response_format {
+        InferenceResponseFormat::Text => types::chat::ResponseFormat::Text,
+        InferenceResponseFormat::JsonObject => types::chat::ResponseFormat::JsonObject,
+        InferenceResponseFormat::JsonSchema { json_schema } => {
+            types::chat::ResponseFormat::JsonSchema {
+                json_schema: types::chat::JsonSchemaConfig {
+                    name: json_schema.name,
+                    description: json_schema.description,
+                    schema: json_schema.schema,
+                    strict: json_schema.strict,
+                },
+            }
+        }
+    })
 }
 
 #[derive(Default)]
@@ -482,6 +508,7 @@ mod tests {
             temperature: None,
             max_tokens: None,
             thinking_budget: None,
+            response_format: None,
         };
 
         let out = to_openai_request(req).expect("request normalization");
@@ -507,9 +534,56 @@ mod tests {
             temperature: None,
             max_tokens: None,
             thinking_budget: None,
+            response_format: None,
         };
 
         let out = to_openai_request(req).expect("request normalization");
         assert!(out.tool_choice.is_none());
+    }
+
+    #[test]
+    fn test_to_openai_request_maps_json_schema_response_format() {
+        let req = InferenceRequest {
+            model: "gpt-4o-mini".to_string(),
+            messages: vec![inference_sdk_core::InferenceMessage {
+                role: InferenceRole::User,
+                content: vec![InferenceContent::Text {
+                    text: "hello".to_string(),
+                }],
+                tool_call_id: None,
+            }],
+            system: None,
+            tools: None,
+            temperature: None,
+            max_tokens: None,
+            thinking_budget: None,
+            response_format: Some(InferenceResponseFormat::JsonSchema {
+                json_schema: inference_sdk_core::InferenceJsonSchemaConfig {
+                    name: "review_result".to_string(),
+                    description: Some("Structured review output".to_string()),
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "approved": { "type": "boolean" }
+                        },
+                        "required": ["approved"]
+                    }),
+                    strict: Some(true),
+                },
+            }),
+        };
+
+        let out = to_openai_request(req).expect("request normalization");
+        match out.response_format {
+            Some(types::chat::ResponseFormat::JsonSchema { json_schema }) => {
+                assert_eq!(json_schema.name, "review_result");
+                assert_eq!(json_schema.strict, Some(true));
+                assert_eq!(
+                    json_schema.schema["required"],
+                    serde_json::json!(["approved"])
+                );
+            }
+            other => panic!("expected json_schema response_format, got {other:?}"),
+        }
     }
 }

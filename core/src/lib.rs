@@ -14,6 +14,11 @@ pub use stream_contract::{EventOrderValidator, validate_event_sequence};
 
 /// A provider that can fulfill inference requests.
 pub trait InferenceProvider: Send + Sync {
+    fn supports_response_format(&self, response_format: &InferenceResponseFormat) -> bool {
+        let _ = response_format;
+        false
+    }
+
     fn complete<'a>(
         &'a self,
         request: InferenceRequest,
@@ -118,6 +123,10 @@ pub struct InferenceRequest {
     /// Providers that support it will use this; others will ignore it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget: Option<u32>,
+
+    /// Optional response format hint for structured output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<InferenceResponseFormat>,
 }
 
 // Bon builder
@@ -132,6 +141,7 @@ impl InferenceRequest {
         #[builder(into)] system: Option<String>,
         tools: Option<Vec<Tool>>,
         thinking_budget: Option<u32>,
+        response_format: Option<InferenceResponseFormat>,
     ) -> Self {
         Self {
             model,
@@ -141,8 +151,29 @@ impl InferenceRequest {
             system,
             tools,
             thinking_budget,
+            response_format,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InferenceResponseFormat {
+    Text,
+    JsonObject,
+    JsonSchema {
+        json_schema: InferenceJsonSchemaConfig,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InferenceJsonSchemaConfig {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub schema: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
 }
 
 /// A normalized message in the conversation.

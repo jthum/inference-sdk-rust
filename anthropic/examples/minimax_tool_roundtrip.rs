@@ -97,6 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         temperature: None,
         max_tokens: Some(512),
         thinking_budget: None,
+        response_format: None,
     };
 
     dump_normalized_request("TURN 1", &req1);
@@ -143,6 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         temperature: None,
         max_tokens: Some(256),
         thinking_budget: None,
+        response_format: None,
     };
 
     dump_normalized_request("TURN 2", &req2);

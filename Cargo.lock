@@ -21,6 +21,7 @@ checksum = "5192cca8006f1fd4f7237516f40fa183bb07f8fbdfedaa0036de5ea9b0b45e78"
 name = "anthropic-sdk"
 version = "0.7.0"
 dependencies = [
+ "base64",
  "bon",
  "clap",
  "dotenvy",
@@ -948,6 +949,7 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 name = "openai-sdk"
 version = "0.7.0"
 dependencies = [
+ "base64",
  "bon",
  "eventsource-stream",
  "futures-core",

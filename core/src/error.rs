@@ -28,6 +28,8 @@ pub enum StreamInvariantViolation {
 pub enum SdkError {
     #[error("API error: {0}")]
     ApiError(String),
+    #[error("I/O error: {0}")]
+    IoError(#[from] std::io::Error),
     #[error("Network error: {0}")]
     NetworkError(#[from] reqwest::Error),
     #[error("Serialization error: {0}")]

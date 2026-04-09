@@ -1,8 +1,11 @@
 use crate::types;
+use base64::Engine;
 use inference_sdk_core::{
     InferenceContent, InferenceEvent, InferenceRequest, InferenceResponseFormat, InferenceRole,
     SdkError, StopReason,
 };
+use std::fs;
+use std::path::Path;
 
 pub fn to_openai_request(
     req: InferenceRequest,
@@ -22,17 +25,10 @@ pub fn to_openai_request(
     for msg in req.messages {
         match msg.role {
             InferenceRole::User => {
-                let mut text_parts: Vec<String> = Vec::new();
-                for content in msg.content {
-                    if let InferenceContent::Text { text } = content {
-                        text_parts.push(text);
-                    }
-                }
-
-                if !text_parts.is_empty() {
+                if let Some(content) = normalize_user_content(msg.content)? {
                     messages.push(types::chat::ChatMessage {
                         role: types::chat::ChatRole::User,
-                        content: Some(types::chat::ChatContent::Text(text_parts.join("\n"))),
+                        content: Some(content),
                         name: None,
                         tool_calls: None,
                         tool_call_id: None,
@@ -132,6 +128,170 @@ pub fn to_openai_request(
         .maybe_tool_choice(tool_choice)
         .maybe_response_format(response_format)
         .build())
+}
+
+fn normalize_user_content(
+    content: Vec<InferenceContent>,
+) -> Result<Option<types::chat::ChatContent>, SdkError> {
+    let mut text_parts = Vec::new();
+    let mut mixed_parts = Vec::new();
+    let mut saw_non_text = false;
+
+    for item in content {
+        match item {
+            InferenceContent::Text { text } => {
+                if saw_non_text {
+                    mixed_parts.push(types::chat::ContentPart::Text { text });
+                } else {
+                    text_parts.push(text);
+                }
+            }
+            InferenceContent::Image {
+                content_type,
+                url,
+                local_path,
+                detail,
+                ..
+            } => {
+                saw_non_text = true;
+                if !text_parts.is_empty() {
+                    mixed_parts.extend(
+                        text_parts
+                            .drain(..)
+                            .map(|text| types::chat::ContentPart::Text { text }),
+                    );
+                }
+
+                mixed_parts.push(types::chat::ContentPart::ImageUrl {
+                    image_url: types::chat::ImageUrl {
+                        url: normalize_openai_image_url(
+                            content_type.as_deref(),
+                            local_path.as_deref(),
+                            url.as_deref(),
+                        )?,
+                        detail,
+                    },
+                });
+            }
+            InferenceContent::File {
+                name,
+                content_type,
+                url,
+                local_path,
+            } => {
+                saw_non_text = true;
+                if !text_parts.is_empty() {
+                    mixed_parts.extend(
+                        text_parts
+                            .drain(..)
+                            .map(|text| types::chat::ContentPart::Text { text }),
+                    );
+                }
+
+                mixed_parts.push(types::chat::ContentPart::Text {
+                    text: render_file_fallback_text(
+                        name.as_deref(),
+                        content_type.as_deref(),
+                        url.as_deref(),
+                        local_path.as_deref(),
+                    ),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    if saw_non_text {
+        if mixed_parts.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(types::chat::ChatContent::Parts(mixed_parts)))
+        }
+    } else if text_parts.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(types::chat::ChatContent::Text(text_parts.join("\n"))))
+    }
+}
+
+fn normalize_openai_image_url(
+    content_type: Option<&str>,
+    local_path: Option<&str>,
+    url: Option<&str>,
+) -> Result<String, SdkError> {
+    if let Some(local_path) = local_path {
+        let bytes = fs::read(local_path)?;
+        let media_type = infer_image_media_type(content_type, local_path)?;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+        return Ok(format!("data:{media_type};base64,{encoded}"));
+    }
+
+    url.map(str::to_string).ok_or_else(|| {
+        SdkError::ConfigError("image content must include either local_path or url".to_string())
+    })
+}
+
+fn infer_image_media_type(
+    content_type: Option<&str>,
+    local_path: &str,
+) -> Result<String, SdkError> {
+    if let Some(content_type) = content_type {
+        let content_type = content_type.trim().to_ascii_lowercase();
+        return match content_type.as_str() {
+            "image/png" => Ok("image/png".to_string()),
+            "image/jpeg" | "image/jpg" => Ok("image/jpeg".to_string()),
+            "image/gif" => Ok("image/gif".to_string()),
+            "image/webp" => Ok("image/webp".to_string()),
+            "image/bmp" => Ok("image/bmp".to_string()),
+            other if other.starts_with("image/") => Ok(other.to_string()),
+            other => Err(SdkError::ConfigError(format!(
+                "unsupported image content_type '{other}'"
+            ))),
+        };
+    }
+
+    let extension = Path::new(local_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase);
+
+    match extension.as_deref() {
+        Some("png") => Ok("image/png".to_string()),
+        Some("jpg" | "jpeg") => Ok("image/jpeg".to_string()),
+        Some("gif") => Ok("image/gif".to_string()),
+        Some("webp") => Ok("image/webp".to_string()),
+        Some("bmp") => Ok("image/bmp".to_string()),
+        _ => Err(SdkError::ConfigError(format!(
+            "could not infer image media type for '{local_path}'"
+        ))),
+    }
+}
+
+fn render_file_fallback_text(
+    name: Option<&str>,
+    content_type: Option<&str>,
+    url: Option<&str>,
+    local_path: Option<&str>,
+) -> String {
+    let mut details = Vec::new();
+
+    if let Some(name) = name.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("name={name}"));
+    }
+    if let Some(content_type) = content_type.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("type={content_type}"));
+    }
+    if let Some(local_path) = local_path.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("local_path={local_path}"));
+    } else if let Some(url) = url.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("url={url}"));
+    }
+
+    if details.is_empty() {
+        "[file attachment]".to_string()
+    } else {
+        format!("[file attachment: {}]", details.join(", "))
+    }
 }
 
 fn normalize_response_format(
@@ -259,6 +419,17 @@ mod tests {
     use crate::types::chat::{
         ChatCompletionChunk, ChunkChoice, ChunkDelta, ChunkFunctionCall, ChunkToolCall, Usage,
     };
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_fixture_path(extension: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("inference_sdk_openai_{nonce}.{extension}"))
+    }
 
     fn make_choice_chunk(
         tool_calls: Option<Vec<ChunkToolCall>>,
@@ -585,5 +756,73 @@ mod tests {
             }
             other => panic!("expected json_schema response_format, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_to_openai_request_maps_images_and_files_in_user_content() {
+        let image_path = temp_fixture_path("png");
+        fs::write(&image_path, [1_u8, 2, 3, 4]).expect("fixture image");
+
+        let req = InferenceRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![inference_sdk_core::InferenceMessage {
+                role: InferenceRole::User,
+                content: vec![
+                    InferenceContent::Text {
+                        text: "please inspect".to_string(),
+                    },
+                    InferenceContent::Image {
+                        name: Some("diagram.png".to_string()),
+                        content_type: Some("image/png".to_string()),
+                        url: None,
+                        local_path: Some(image_path.display().to_string()),
+                        detail: Some("high".to_string()),
+                    },
+                    InferenceContent::File {
+                        name: Some("spec.pdf".to_string()),
+                        content_type: Some("application/pdf".to_string()),
+                        url: Some("https://example.test/spec.pdf".to_string()),
+                        local_path: None,
+                    },
+                ],
+                tool_call_id: None,
+            }],
+            system: None,
+            tools: None,
+            temperature: None,
+            max_tokens: None,
+            thinking_budget: None,
+            response_format: None,
+        };
+
+        let out = to_openai_request(req).expect("request normalization");
+        let user_message = out
+            .messages
+            .into_iter()
+            .find(|message| message.role == types::chat::ChatRole::User)
+            .expect("user message");
+
+        match user_message.content.expect("user content") {
+            types::chat::ChatContent::Parts(parts) => {
+                assert!(matches!(
+                    &parts[0],
+                    types::chat::ContentPart::Text { text } if text == "please inspect"
+                ));
+                assert!(matches!(
+                    &parts[1],
+                    types::chat::ContentPart::ImageUrl { image_url }
+                    if image_url.url.starts_with("data:image/png;base64,")
+                        && image_url.detail.as_deref() == Some("high")
+                ));
+                assert!(matches!(
+                    &parts[2],
+                    types::chat::ContentPart::Text { text }
+                    if text.contains("spec.pdf") && text.contains("application/pdf")
+                ));
+            }
+            other => panic!("expected content parts, got {other:?}"),
+        }
+
+        let _ = fs::remove_file(image_path);
     }
 }

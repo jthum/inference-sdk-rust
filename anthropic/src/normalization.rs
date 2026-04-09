@@ -1,8 +1,11 @@
 use crate::types;
+use base64::Engine;
 use inference_sdk_core::{
     InferenceContent, InferenceEvent, InferenceRequest, InferenceRole, RequestOptions, SdkError,
     StopReason,
 };
+use std::fs;
+use std::path::Path;
 
 pub fn to_anthropic_request(
     req: InferenceRequest,
@@ -21,8 +24,40 @@ pub fn to_anthropic_request(
             InferenceRole::User => {
                 let mut content_blocks = Vec::new();
                 for content in msg.content {
-                    if let InferenceContent::Text { text } = content {
-                        content_blocks.push(types::message::ContentBlock::Text { text });
+                    match content {
+                        InferenceContent::Text { text } => {
+                            content_blocks.push(types::message::ContentBlock::Text { text });
+                        }
+                        InferenceContent::Image {
+                            content_type,
+                            url,
+                            local_path,
+                            ..
+                        } => {
+                            content_blocks.push(types::message::ContentBlock::Image {
+                                source: encode_anthropic_image(
+                                    content_type.as_deref(),
+                                    local_path.as_deref(),
+                                    url.as_deref(),
+                                )?,
+                            });
+                        }
+                        InferenceContent::File {
+                            name,
+                            content_type,
+                            url,
+                            local_path,
+                        } => {
+                            content_blocks.push(types::message::ContentBlock::Text {
+                                text: render_file_fallback_text(
+                                    name.as_deref(),
+                                    content_type.as_deref(),
+                                    url.as_deref(),
+                                    local_path.as_deref(),
+                                ),
+                            });
+                        }
+                        _ => {}
                     }
                 }
 
@@ -118,6 +153,94 @@ pub fn to_anthropic_request(
         .maybe_tools(tools)
         .maybe_thinking(thinking)
         .build())
+}
+
+fn encode_anthropic_image(
+    content_type: Option<&str>,
+    local_path: Option<&str>,
+    url: Option<&str>,
+) -> Result<types::message::ImageSource, SdkError> {
+    let local_path = local_path.ok_or_else(|| {
+        let suffix = url
+            .map(|value| {
+                format!("; url-only image refs are not supported by the anthropic driver: {value}")
+            })
+            .unwrap_or_default();
+        SdkError::ConfigError(format!(
+            "anthropic image content must include local_path{suffix}"
+        ))
+    })?;
+
+    let bytes = fs::read(local_path)?;
+    let media_type = infer_image_media_type(content_type, local_path)?;
+    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+
+    Ok(types::message::ImageSource {
+        source_type: "base64".to_string(),
+        media_type,
+        data,
+    })
+}
+
+fn infer_image_media_type(
+    content_type: Option<&str>,
+    local_path: &str,
+) -> Result<String, SdkError> {
+    if let Some(content_type) = content_type {
+        let content_type = content_type.trim().to_ascii_lowercase();
+        return match content_type.as_str() {
+            "image/png" => Ok("image/png".to_string()),
+            "image/jpeg" | "image/jpg" => Ok("image/jpeg".to_string()),
+            "image/gif" => Ok("image/gif".to_string()),
+            "image/webp" => Ok("image/webp".to_string()),
+            other if other.starts_with("image/") => Ok(other.to_string()),
+            other => Err(SdkError::ConfigError(format!(
+                "unsupported image content_type '{other}'"
+            ))),
+        };
+    }
+
+    let extension = Path::new(local_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase);
+
+    match extension.as_deref() {
+        Some("png") => Ok("image/png".to_string()),
+        Some("jpg" | "jpeg") => Ok("image/jpeg".to_string()),
+        Some("gif") => Ok("image/gif".to_string()),
+        Some("webp") => Ok("image/webp".to_string()),
+        _ => Err(SdkError::ConfigError(format!(
+            "could not infer image media type for '{local_path}'"
+        ))),
+    }
+}
+
+fn render_file_fallback_text(
+    name: Option<&str>,
+    content_type: Option<&str>,
+    url: Option<&str>,
+    local_path: Option<&str>,
+) -> String {
+    let mut details = Vec::new();
+
+    if let Some(name) = name.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("name={name}"));
+    }
+    if let Some(content_type) = content_type.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("type={content_type}"));
+    }
+    if let Some(local_path) = local_path.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("local_path={local_path}"));
+    } else if let Some(url) = url.filter(|value| !value.trim().is_empty()) {
+        details.push(format!("url={url}"));
+    }
+
+    if details.is_empty() {
+        "[file attachment]".to_string()
+    } else {
+        format!("[file attachment: {}]", details.join(", "))
+    }
 }
 
 #[derive(Default)]
@@ -302,6 +425,17 @@ mod request_normalization_tests {
         InferenceContent, InferenceMessage, InferenceRequest, InferenceResponseFormat,
         InferenceRole,
     };
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_fixture_path(extension: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("inference_sdk_anthropic_{nonce}.{extension}"))
+    }
 
     #[test]
     fn preserves_assistant_thinking_blocks_in_request_history() {
@@ -368,6 +502,64 @@ mod request_normalization_tests {
             err.to_string().contains("structured response_format"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn maps_user_images_and_files() {
+        let image_path = temp_fixture_path("png");
+        fs::write(&image_path, [1_u8, 2, 3, 4]).expect("fixture image");
+
+        let req = InferenceRequest::builder()
+            .model("test-model")
+            .messages(vec![InferenceMessage {
+                role: InferenceRole::User,
+                content: vec![
+                    InferenceContent::Text {
+                        text: "inspect these".to_string(),
+                    },
+                    InferenceContent::Image {
+                        name: Some("diagram.png".to_string()),
+                        content_type: Some("image/png".to_string()),
+                        url: None,
+                        local_path: Some(image_path.display().to_string()),
+                        detail: None,
+                    },
+                    InferenceContent::File {
+                        name: Some("spec.pdf".to_string()),
+                        content_type: Some("application/pdf".to_string()),
+                        url: Some("https://example.test/spec.pdf".to_string()),
+                        local_path: None,
+                    },
+                ],
+                tool_call_id: None,
+            }])
+            .max_tokens(128)
+            .build();
+
+        let out = to_anthropic_request(req).expect("request should normalize");
+        match &out.messages[0].content {
+            crate::types::message::Content::Blocks(blocks) => {
+                assert!(matches!(
+                    &blocks[0],
+                    crate::types::message::ContentBlock::Text { text } if text == "inspect these"
+                ));
+                assert!(matches!(
+                    &blocks[1],
+                    crate::types::message::ContentBlock::Image { source }
+                    if source.source_type == "base64"
+                        && source.media_type == "image/png"
+                        && !source.data.is_empty()
+                ));
+                assert!(matches!(
+                    &blocks[2],
+                    crate::types::message::ContentBlock::Text { text }
+                    if text.contains("spec.pdf") && text.contains("application/pdf")
+                ));
+            }
+            other => panic!("unexpected content form: {other:?}"),
+        }
+
+        let _ = fs::remove_file(image_path);
     }
 }
 

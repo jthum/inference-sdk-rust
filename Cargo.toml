@@ -16,6 +16,7 @@ bon = "3.8.2"
 wiremock = "0.6.5"
 dotenvy = "0.15"
 clap = { version = "4.5", default-features = false, features = ["derive", "std"] }
+base64 = "0.22"
 inference-sdk-core = { path = "./core" }
 openai-sdk = { path = "./openai" }
 anthropic-sdk = { path = "./anthropic" }

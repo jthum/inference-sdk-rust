@@ -18,6 +18,8 @@ proptest! {
             InferenceEvent::MessageEnd {
                 input_tokens: 1,
                 output_tokens: 1,
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
                 stop_reason: Some(StopReason::ToolUse),
             },
         ];
@@ -63,6 +65,8 @@ proptest! {
         events.push(Ok(InferenceEvent::MessageEnd {
             input_tokens: 2,
             output_tokens: 3,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::ToolUse),
         }));
 

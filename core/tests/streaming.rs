@@ -40,6 +40,8 @@ async fn test_from_stream_accumulates_tool_calls() {
         Ok(InferenceEvent::MessageEnd {
             input_tokens: 10,
             output_tokens: 20,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::ToolUse),
         }),
     ];
@@ -89,6 +91,8 @@ async fn test_from_stream_allows_signature_delta_before_thinking_delta() {
         Ok(InferenceEvent::MessageEnd {
             input_tokens: 1,
             output_tokens: 1,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::EndTurn),
         }),
     ];
@@ -125,6 +129,8 @@ async fn test_from_stream_returns_error_for_invalid_tool_json() {
         Ok(InferenceEvent::MessageEnd {
             input_tokens: 1,
             output_tokens: 2,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::ToolUse),
         }),
     ];
@@ -167,6 +173,8 @@ async fn test_from_stream_returns_error_when_delta_precedes_message_start() {
         Ok(InferenceEvent::MessageEnd {
             input_tokens: 1,
             output_tokens: 1,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::EndTurn),
         }),
     ];
@@ -187,6 +195,8 @@ async fn test_from_stream_returns_error_when_message_end_precedes_message_start(
     let events = vec![Ok(InferenceEvent::MessageEnd {
         input_tokens: 1,
         output_tokens: 1,
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
         stop_reason: Some(StopReason::EndTurn),
     })];
 
@@ -252,6 +262,8 @@ async fn test_from_stream_rolls_tool_calls_on_new_tool_start() {
         Ok(InferenceEvent::MessageEnd {
             input_tokens: 1,
             output_tokens: 1,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::ToolUse),
         }),
     ];

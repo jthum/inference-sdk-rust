@@ -23,6 +23,8 @@ fn test_anthropic_provider_contract_tool_stream_order_and_message_end() {
             usage: Usage {
                 input_tokens: 13,
                 output_tokens: 0,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         },
     }));
@@ -54,7 +56,12 @@ fn test_anthropic_provider_contract_tool_stream_order_and_message_end() {
             stop_reason: Some("tool_use".to_string()),
             stop_sequence: None,
         },
-        usage: MessageDeltaUsage { output_tokens: 21 },
+        usage: MessageDeltaUsage {
+            output_tokens: 21,
+            input_tokens: None,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        },
     }));
 
     let events: Vec<InferenceEvent> = out.into_iter().collect::<Result<_, _>>().unwrap();
@@ -69,7 +76,8 @@ fn test_anthropic_provider_contract_tool_stream_order_and_message_end() {
         InferenceEvent::MessageEnd {
             input_tokens: 13,
             output_tokens: 21,
-            stop_reason: Some(StopReason::ToolUse)
+            stop_reason: Some(StopReason::ToolUse),
+            ..
         }
     ));
 }

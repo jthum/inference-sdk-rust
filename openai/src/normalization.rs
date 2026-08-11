@@ -335,6 +335,10 @@ impl OpenAiStreamAdapter {
                 events.push(Ok(InferenceEvent::MessageEnd {
                     input_tokens: usage.prompt_tokens,
                     output_tokens: usage.completion_tokens,
+                    cache_read_input_tokens: usage
+                        .prompt_tokens_details
+                        .and_then(|details| details.cached_tokens),
+                    cache_creation_input_tokens: None,
                     stop_reason: self.stop_reason.clone(),
                 }));
             }
@@ -404,6 +408,10 @@ impl OpenAiStreamAdapter {
                 events.push(Ok(InferenceEvent::MessageEnd {
                     input_tokens: usage.prompt_tokens,
                     output_tokens: usage.completion_tokens,
+                    cache_read_input_tokens: usage
+                        .prompt_tokens_details
+                        .and_then(|details| details.cached_tokens),
+                    cache_creation_input_tokens: None,
                     stop_reason: self.stop_reason.clone(),
                 }));
             }
@@ -466,6 +474,7 @@ mod tests {
                 prompt_tokens,
                 completion_tokens,
                 total_tokens: prompt_tokens + completion_tokens,
+                prompt_tokens_details: None,
             }),
             system_fingerprint: None,
         }
@@ -498,6 +507,7 @@ mod tests {
                 prompt_tokens,
                 completion_tokens,
                 total_tokens: prompt_tokens + completion_tokens,
+                prompt_tokens_details: None,
             }),
             system_fingerprint: None,
         }
@@ -565,7 +575,32 @@ mod tests {
             Ok(InferenceEvent::MessageEnd {
                 input_tokens: 12,
                 output_tokens: 34,
-                stop_reason: Some(StopReason::EndTurn)
+                stop_reason: Some(StopReason::EndTurn),
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_openai_adapter_captures_cached_prompt_tokens() {
+        let mut adapter = OpenAiStreamAdapter::new();
+        let mut usage_chunk = make_usage_chunk(120, 34);
+        usage_chunk
+            .usage
+            .as_mut()
+            .expect("usage chunk")
+            .prompt_tokens_details = Some(types::chat::PromptTokensDetails {
+            cached_tokens: Some(96),
+        });
+
+        let events = adapter.process_chunk(usage_chunk);
+        assert!(matches!(
+            events[0],
+            Ok(InferenceEvent::MessageEnd {
+                input_tokens: 120,
+                cache_read_input_tokens: Some(96),
+                cache_creation_input_tokens: None,
+                ..
             })
         ));
     }

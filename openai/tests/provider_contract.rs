@@ -97,6 +97,7 @@ fn test_openai_provider_contract_tool_stream_order_and_message_end() {
             prompt_tokens: 11,
             completion_tokens: 22,
             total_tokens: 33,
+            prompt_tokens_details: None,
         }),
         Some(vec![]),
     );
@@ -114,7 +115,8 @@ fn test_openai_provider_contract_tool_stream_order_and_message_end() {
         InferenceEvent::MessageEnd {
             input_tokens: 11,
             output_tokens: 22,
-            stop_reason: Some(StopReason::ToolUse)
+            stop_reason: Some(StopReason::ToolUse),
+            ..
         }
     ));
 }

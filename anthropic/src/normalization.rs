@@ -246,6 +246,8 @@ fn render_file_fallback_text(
 #[derive(Default)]
 pub struct AnthropicStreamAdapter {
     input_tokens: u32,
+    cache_read_input_tokens: Option<u32>,
+    cache_creation_input_tokens: Option<u32>,
 }
 
 impl AnthropicStreamAdapter {
@@ -260,6 +262,8 @@ impl AnthropicStreamAdapter {
         match event {
             types::message::StreamEvent::MessageStart { message } => {
                 self.input_tokens = message.usage.input_tokens;
+                self.cache_read_input_tokens = message.usage.cache_read_input_tokens;
+                self.cache_creation_input_tokens = message.usage.cache_creation_input_tokens;
 
                 vec![Ok(InferenceEvent::MessageStart {
                     role: "assistant".to_string(),
@@ -288,6 +292,15 @@ impl AnthropicStreamAdapter {
                 ..
             } => vec![Ok(InferenceEvent::ToolCallStart { id, name })],
             types::message::StreamEvent::MessageDelta { delta, usage } => {
+                if let Some(input_tokens) = usage.input_tokens {
+                    self.input_tokens = input_tokens;
+                }
+                if usage.cache_read_input_tokens.is_some() {
+                    self.cache_read_input_tokens = usage.cache_read_input_tokens;
+                }
+                if usage.cache_creation_input_tokens.is_some() {
+                    self.cache_creation_input_tokens = usage.cache_creation_input_tokens;
+                }
                 let stop_reason = delta.stop_reason.map(|s| match s.as_str() {
                     "end_turn" => StopReason::EndTurn,
                     "max_tokens" => StopReason::MaxTokens,
@@ -297,8 +310,13 @@ impl AnthropicStreamAdapter {
                 });
 
                 vec![Ok(InferenceEvent::MessageEnd {
-                    input_tokens: self.input_tokens,
+                    input_tokens: self
+                        .input_tokens
+                        .saturating_add(self.cache_read_input_tokens.unwrap_or(0))
+                        .saturating_add(self.cache_creation_input_tokens.unwrap_or(0)),
                     output_tokens: usage.output_tokens,
+                    cache_read_input_tokens: self.cache_read_input_tokens,
+                    cache_creation_input_tokens: self.cache_creation_input_tokens,
                     stop_reason,
                 })]
             }
@@ -346,6 +364,8 @@ mod tests {
                 usage: AnthropicUsage {
                     input_tokens: 10,
                     output_tokens: 1,
+                    cache_creation_input_tokens: None,
+                    cache_read_input_tokens: None,
                 },
             },
         };
@@ -364,7 +384,12 @@ mod tests {
                 stop_reason: Some("end_turn".to_string()),
                 stop_sequence: None,
             },
-            usage: MessageDeltaUsage { output_tokens: 20 },
+            usage: MessageDeltaUsage {
+                output_tokens: 20,
+                input_tokens: None,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
+            },
         };
 
         let events = adapter.process_event(delta_event);
@@ -373,6 +398,7 @@ mod tests {
             input_tokens,
             output_tokens,
             stop_reason,
+            ..
         }) = &events[0]
         {
             assert_eq!(*input_tokens, 10);
@@ -381,6 +407,52 @@ mod tests {
         } else {
             panic!("Expected MessageEnd");
         }
+    }
+
+    #[test]
+    fn test_anthropic_adapter_normalizes_cache_usage_and_total_input() {
+        let mut adapter = AnthropicStreamAdapter::new();
+        adapter.process_event(StreamEvent::MessageStart {
+            message: MessageResponse {
+                id: "msg_cached".to_string(),
+                response_type: "message".to_string(),
+                role: crate::types::message::Role::Assistant,
+                content: vec![],
+                model: "claude-sonnet".to_string(),
+                stop_reason: None,
+                stop_sequence: None,
+                usage: AnthropicUsage {
+                    input_tokens: 12,
+                    output_tokens: 1,
+                    cache_creation_input_tokens: Some(30),
+                    cache_read_input_tokens: Some(80),
+                },
+            },
+        });
+
+        let events = adapter.process_event(StreamEvent::MessageDelta {
+            delta: crate::types::message::MessageDelta {
+                stop_reason: Some("end_turn".to_string()),
+                stop_sequence: None,
+            },
+            usage: MessageDeltaUsage {
+                output_tokens: 20,
+                input_tokens: None,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
+            },
+        });
+
+        assert!(matches!(
+            events[0],
+            Ok(InferenceEvent::MessageEnd {
+                input_tokens: 122,
+                output_tokens: 20,
+                cache_read_input_tokens: Some(80),
+                cache_creation_input_tokens: Some(30),
+                ..
+            })
+        ));
     }
 
     #[test]

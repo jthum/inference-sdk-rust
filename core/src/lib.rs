@@ -252,6 +252,12 @@ pub struct Tool {
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
+    /// Input tokens served from a provider prompt cache, when reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u32>,
+    /// Input tokens used to populate a provider prompt cache, when reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_creation_input_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -325,6 +331,8 @@ impl InferenceResult {
         let mut usage = Usage {
             input_tokens: 0,
             output_tokens: 0,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
         };
 
         // Tool call accumulation state.
@@ -406,6 +414,8 @@ impl InferenceResult {
                         InferenceEvent::MessageEnd {
                             input_tokens,
                             output_tokens,
+                            cache_read_input_tokens,
+                            cache_creation_input_tokens,
                             stop_reason: sr,
                         } => {
                             Self::finalize_pending_tool(
@@ -417,6 +427,8 @@ impl InferenceResult {
                             usage = Usage {
                                 input_tokens,
                                 output_tokens,
+                                cache_read_input_tokens,
+                                cache_creation_input_tokens,
                             };
                             stop_reason = sr;
                         }
@@ -461,8 +473,16 @@ pub enum InferenceEvent {
     ToolCallDelta { delta: String },
     /// The end of a message response, including usage statistics.
     MessageEnd {
+        /// Total input tokens consumed by the request, including cache reads and
+        /// cache creation where providers report those as separate categories.
         input_tokens: u32,
         output_tokens: u32,
+        /// Input tokens served from a provider prompt cache, when reported.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_read_input_tokens: Option<u32>,
+        /// Input tokens used to populate a provider prompt cache, when reported.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_creation_input_tokens: Option<u32>,
         stop_reason: Option<StopReason>,
     },
 }

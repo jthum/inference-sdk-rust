@@ -23,6 +23,8 @@ fn test_validate_event_sequence_accepts_valid_order() {
         InferenceEvent::MessageEnd {
             input_tokens: 1,
             output_tokens: 2,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::ToolUse),
         },
     ];
@@ -44,6 +46,8 @@ fn test_validate_event_sequence_rejects_tool_delta_before_start() {
         InferenceEvent::MessageEnd {
             input_tokens: 1,
             output_tokens: 2,
+            cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
             stop_reason: Some(StopReason::ToolUse),
         },
     ];
@@ -78,6 +82,8 @@ fn test_validate_event_sequence_rejects_message_end_before_start() {
     let events = vec![InferenceEvent::MessageEnd {
         input_tokens: 1,
         output_tokens: 2,
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
         stop_reason: Some(StopReason::EndTurn),
     }];
 

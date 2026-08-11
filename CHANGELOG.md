@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Normalize optional provider prompt-cache usage on inference results and message-end events. OpenAI-compatible chat responses expose cached prompt reads; Anthropic responses expose cache reads and cache creation, with normalized total input including all three Anthropic input categories.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

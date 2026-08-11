@@ -31,6 +31,8 @@ fn build_text_events(delta_count: usize, delta_len: usize) -> Vec<InferenceEvent
     events.push(InferenceEvent::MessageEnd {
         input_tokens: 16,
         output_tokens: 32,
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
         stop_reason: Some(StopReason::EndTurn),
     });
     events
@@ -59,6 +61,8 @@ fn build_tool_events(payload_len: usize, chunk_len: usize) -> Vec<InferenceEvent
     events.push(InferenceEvent::MessageEnd {
         input_tokens: 32,
         output_tokens: 64,
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
         stop_reason: Some(StopReason::ToolUse),
     });
     events
@@ -86,6 +90,8 @@ fn measure_validate_event_sequence_large_message() -> Duration {
     events.push(InferenceEvent::MessageEnd {
         input_tokens: 16,
         output_tokens: 32,
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
         stop_reason: Some(StopReason::EndTurn),
     });
 

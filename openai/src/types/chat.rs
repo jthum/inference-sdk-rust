@@ -181,6 +181,14 @@ pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PromptTokensDetails {
+    #[serde(default)]
+    pub cached_tokens: Option<u32>,
 }
 
 // ─── Streaming Types ─────────────────────────────────────────────
